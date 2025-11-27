@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Integrated Site Feasibility Engine v2.2</title>
+<!-- Library Imports -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://unpkg.com/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+<script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+</script>
+<style>
+    :root {
+        --primary-color: #3f51b5;
+        --secondary-color: #1a237e;
+        --accent-color: #f50057;
+        --light-gray: #f4f7f9;
+        --medium-gray: #e0e0e0;
+        --dark-gray: #6c757d;
+        --success-color: #28a745;
+        --warning-color: #ffc107;
+        --danger-color: #dc3545;
+    }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        margin: 0; padding: 0; background-color: var(--light-gray);
+        color: #333; display: flex; height: 100vh; overflow: hidden;
+    }
+    .sidebar {
+        width: 380px; min-width: 350px; background-color: #ffffff;
+        border-right: 1px solid var(--medium-gray); overflow-y: auto;
+        display: flex; flex-direction: column;
+    }
+    .main-content {
+        flex-grow: 1; padding: 20px; display: flex; flex-direction: column;
+        align-items: center; justify-content: flex-start; overflow: auto; position: relative;
+    }
+    h1, h2, h3, h4 { color: var(--secondary-color); margin-top: 0; }
+    h2 { border-bottom: 2px solid var(--primary-color); padding-bottom: 8px; }
+    h3, h4 { font-size: 1.1em; color: var(--primary-color); margin-top: 20px; margin-bottom: 10px; }
+    .control-group { padding: 15px; border-bottom: 1px solid #eee; }
+    label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9em; }
+    input[type="file"], input[type="number"], input[type="text"], select {
+        width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc;
+        border-radius: 4px; margin-bottom: 10px;
+    }
+    select[multiple] { height: 100px; }
+    button, .button {
+        background-color: var(--primary-color); color: white; border: none; padding: 10px 15px;
+        border-radius: 4px; cursor: pointer; width: 100%; font-size: 0.95em;
+        transition: background-color: 0.3s; margin-top: 5px; box-sizing: border-box;
+    }
+    button:hover, .button:hover { background-color: var(--secondary-color); }
+    button:disabled { background-color: var(--dark-gray); cursor: not-allowed; }
+    button.active { background-color: var(--success-color); font-weight: bold; }
+    button.warning { background-color: var(--warning-color); color: black; }
+    button.danger { background-color: var(--danger-color); }
+    
+    .canvas-container-wrapper {
+        border: 2px dashed #ccc; padding: 10px; background-color: #fff;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1); position: relative; max-width: 100%;
+    }
+    #plot-canvas { background-color: #f0f0f0; }
+    #overlay-canvas { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+    #status-bar {
+        margin-top: 15px; padding: 10px; background-color: #e8eaf6; border-radius: 4px;
+        text-align: center; font-weight: 500; color: var(--secondary-color); min-height: 20px; width: 95%;
+    }
+    
+    /* UI Grid Helpers */
+    .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .button-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+    .button-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 5px; }
+    
+    /* Floating Dashboard */
+    #floating-dashboard {
+        position: fixed; bottom: 20px; right: 20px; width: 340px;
+        background: white; border: 1px solid #ccc; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+        border-radius: 8px; z-index: 2000; display: flex; flex-direction: column;
+        max-height: 85vh; transition: height 0.3s ease;
+    }
+    #floating-header {
+        background: var(--secondary-color); color: white; padding: 10px 15px;
+        cursor: pointer; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between;
+        align-items: center; font-weight: bold; font-size: 0.95em;
+    }
+    #floating-content { padding: 10px 15px; overflow-y: auto; font-size: 0.85em; background: rgba(255,255,255,0.95); }
+    #floating-content.minimized { display: none; }
+    .dash-row { display: flex; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px dotted #eee; padding-bottom: 2px; }
+    .dash-row.header { font-weight: bold; background: #f0f2f5; padding: 5px; margin-top: 8px; margin-bottom: 5px; color: var(--primary-color); border-radius: 3px; }
+    .dash-val { font-weight: 600; }
+    .dash-val.good { color: var(--success-color); }
+    .dash-val.bad { color: var(--danger-color); }
+    .dash-sub { font-size: 0.85em; color: #666; font-style: italic; margin-left: 10px; }
+
+    /* Lock Button */
+    .lock-btn { width: 100%; padding: 8px; margin-top: 5px; text-align: left; position: relative; font-weight: bold; color: white; border:none; border-radius: 4px;}
+    .lock-btn.locked { background-color: var(--danger-color); }
+    .lock-btn.unlocked { background-color: var(--success-color); }
+    .lock-btn::after { content: attr(data-status); position: absolute; right: 10px; opacity: 0.8; font-size: 0.8em; top: 10px;}
+
+    #manual-plot-wrapper { background: #fff3cd; border: 1px solid #ffeeba; padding: 10px; border-radius: 4px; margin-top: 10px; }
+    .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h1 style="text-align:center; margin:10px 0;">Feasibility Engine v2.2</h1>
+    
+    <!-- 1. I/O -->
+    <div class="control-group">
+        <h3>1. Project I/O</h3>
+        <div class="button-grid">
+            <label for="xml-upload" class="button warning" style="text-align:center; padding: 10px 0; margin-top:5px; cursor:pointer;">Import XML</label>
+            <input type="file" id="xml-upload" accept=".xml" style="display:none;">
+            <button id="export-xml-btn">Export XML</button>
+        </div>
+    </div>
+
+    <!-- 2. Scale -->
+    <div class="control-group">
+        <h3>2. Site Plan & Scale</h3>
+        <div class="button-grid" style="margin-bottom:10px;">
+             <label for="plan-upload" class="button" style="text-align:center; padding: 10px 0; margin-top:5px; cursor:pointer;">Upload Plan</label>
+             <input type="file" id="plan-upload" accept=".png, .jpg, .jpeg, .pdf" style="display:none;">
+             <label for="dxf-upload" class="button" style="text-align:center; padding: 10px 0; margin-top:5px; cursor:pointer;">Import DXF</label>
+             <input type="file" id="dxf-upload" accept=".dxf" style="display:none;">
+        </div>
+        <div id="pdf-controls" class="hidden">
+            <label for="pdf-page">PDF Page:</label>
+            <input type="number" id="pdf-page" value="1" min="1">
+        </div>
+        <div id="scale-input-group">
+            <label for="scale-distance">Known Distance (m)</label>
+            <input type="number" id="scale-distance" value="10" step="0.1" disabled>
+            <button id="set-scale-btn" disabled>Set Scale</button>
+        </div>
+        <div id="scale-display" style="font-size:0.8em; margin-top:5px; color:#666;">Scale not set.</div>
+        
+        <!-- DXF Controls (Hidden initially) -->
+        <div id="dxf-controls" class="hidden" style="margin-top:10px; border-top:1px solid #ccc; padding-top:10px;">
+            <h4>DXF Controls</h4>
+            <div class="button-grid-3">
+                <button id="assign-dxf-plot-btn">As Plot</button>
+                <button id="zoom-to-dxf-btn">Zoom</button>
+                <button id="finalize-dxf-btn" class="warning">Finalize</button>
+            </div>
+            <button id="delete-dxf-btn" class="danger">Delete DXF</button>
+        </div>
+    </div>
+
+    <!-- 3. Level Management -->
+    <div class="control-group">
+        <h3>3. Level Management</h3>
+        <div class="button-grid-3" id="level-selector">
+             <!-- Populated by JS -->
+        </div>
+        <button id="toggle-visibility-btn" class="warning" style="margin-top:10px;">Show All Layers</button>
+    </div>
+
+    <!-- 4. Drawing Tools -->
+    <div class="control-group">
+        <h3>4. Drawing Tools</h3>
+        <button id="draw-plot-btn" disabled>Draw Plot Polygon</button>
+        
+        <!-- Manual Plot Override -->
+        <div id="manual-plot-wrapper">
+            <label style="margin-bottom:2px; font-size:0.85em;">Manual Plot Override (Optional)</label>
+            <div class="input-grid">
+                <input type="number" id="manual-plot-area" placeholder="Area (m²)" class="param-input">
+                <input type="number" id="manual-plot-perim" placeholder="Perim (m)" class="param-input">
+            </div>
+            <div id="plot-info" style="font-size:0.8em; color: #444;"></div>
+        </div>
+
+        <button id="draw-building-btn" disabled style="margin-top:5px;">Draw Wing (Footprint)</button>
+        <button id="footprint-from-setbacks-btn" class="active" disabled>Create Footprint from Setbacks</button>
+        
+        <div class="button-grid">
+             <button id="edit-footprint-btn" disabled class="warning">Edit</button>
+             <button id="delete-footprint-btn" disabled class="danger">Delete</button>
+        </div>
+        <button id="confirm-footprint-btn" style="display:none;" class="active">✓ Confirm Edit</button>
+
+        <h4 style="margin-top:15px; margin-bottom:5px;">Setbacks & Snap</h4>
+        <div class="button-grid">
+            <button id="edit-setbacks-btn" disabled>Edit Setbacks</button>
+            <button id="measure-tool-btn" disabled>Measure</button>
+        </div>
+        
+        <div id="individual-setback-controls" class="hidden" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+            <label>Individual Setback</label>
+            <div class="input-grid">
+                <input type="number" id="individual-setback-dist" value="5" placeholder="Dist">
+                <select id="individual-setback-dir"><option value="inside">Inside</option><option value="outside">Outside</option></select>
+            </div>
+            <button id="apply-individual-setback-btn">Apply</button>
+            <button id="clear-setback-selection-btn" class="warning">Clear</button>
+        </div>
+
+        <div id="level-footprint-info" style="font-size:0.8em; margin-top:10px; max-height:100px; overflow-y:auto; border:1px solid #eee; padding:5px;"></div>
+    </div>
+
+    <!-- 5. Parameters -->
+    <div class="control-group">
+        <h3>5. Building Parameters</h3>
+        <div style="margin-bottom:10px;">
+            <label>Project Type</label>
+            <select id="project-type-select">
+                <option value="Residential">Residential</option>
+                <option value="Hotel">Hotel</option>
+                <option value="Commercial">Commercial</option>
+            </select>
+        </div>
+        <div class="input-grid">
+            <div><label>GFA Allowed</label><input type="number" class="param-input" id="allowedGfa" value="13427"></div>
+            <div><label>Retail GFA</label><input type="number" class="param-input" id="allowedRetailGfa" value="1000"></div>
+            <div><label>Office GFA</label><input type="number" class="param-input" id="allowedOfficeGfa" value="2000"></div>
+            <div><label>Nursery GFA</label><input type="number" class="param-input" id="allowedNurseryGfa" value="0"></div>
+        </div>
+        <div class="input-grid" style="margin-top:5px;">
+            <div><label>Basements</label><input type="number" class="param-input" id="numBasements" value="1"></div>
+            <div><label>Podiums</label><input type="number" class="param-input" id="numPodiums" value="3"></div>
+            <div><label>Typical Flrs</label><input type="number" class="param-input" id="numTypicalFloors" value="11"></div>
+        </div>
+    </div>
+
+    <!-- 6. Layout Blocks -->
+    <div class="control-group">
+        <h3>6. Service Blocks</h3>
+        <label>Select Block Type (Ctrl+Click)</label>
+        <select id="serviceBlockType" multiple></select>
+        <button id="add-block-btn" disabled>Add Block(s) to Canvas</button>
+
+        <div id="selected-object-controls" class="hidden" style="margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+            <h4>Selected Object</h4>
+             
+            <!-- Lock Toggle -->
+            <button id="toggle-lock-btn" class="lock-btn locked" data-status="LOCKED">🔒 Locked</button>
+
+            <div id="dimension-controls-wrapper" class="input-grid" style="margin-top:5px;">
+                <div><label>Width (m)</label><input type="number" id="block-width" step="0.1"></div>
+                <div><label>Height (m)</label><input type="number" id="block-height" step="0.1"></div>
+            </div>
+            
+             <div class="button-grid-4" style="margin-top: 5px;">
+                <button id="flip-h-btn">H</button>
+                <button id="flip-v-btn">V</button>
+                <button id="rotate-90-btn">90°</button>
+                <button id="align-block-btn" class="warning">Align</button>
+             </div>
+             <button id="delete-block-btn" class="danger" style="margin-top:5px;">Delete Object</button>
+        </div>
+        
+        <div id="service-block-list" style="font-size:0.8em; margin-top:10px; border:1px solid #eee; padding:5px; max-height:100px; overflow-y:auto;"></div>
+    </div>
+
+    <!-- 7. Actions -->
+    <div class="control-group">
+        <h3>7. Actions & Reports</h3>
+        <button id="calculateBtn" class="active" disabled>Generate Summary Report</button>
+        <div class="button-grid" style="margin-top: 5px;">
+             <button id="previewLayoutBtn" disabled>Preview Layout</button>
+             <button id="export-pdf-btn" class="warning" disabled>Export PDF</button>
+        </div>
+        <button id="generate3dBtn" disabled style="margin-top:5px;">View 3D Model</button>
+    </div>
+</div>
+
+<!-- Main Canvas Area -->
+<div class="main-content">
+    <div class="zoom-controls" style="margin-bottom:10px; display:flex; gap:5px;">
+        <button id="pan-btn" style="width:auto;">✋ Pan</button>
+        <button id="zoom-in-btn" style="width:auto;">+</button>
+        <button id="zoom-out-btn" style="width:auto;">-</button>
+        <button id="zoom-reset-btn" style="width:auto;">Reset</button>
+    </div>
+    <div class="canvas-container-wrapper">
+        <canvas id="plot-canvas"></canvas>
+        <canvas id="overlay-canvas"></canvas>
+    </div>
+    <div id="status-bar">Upload a site plan to begin.</div>
+    <div id="report-container"></div>
+</div>
+
+<!-- NEW: Floating Status Dashboard -->
+<div id="floating-dashboard">
+    <div id="floating-header">
+        <span>Live Feasibility Status</span>
+        <span id="minimize-dash" style="font-size:1.2em;">−</span>
+    </div>
+    <div id="floating-content">
+        <div class="dash-row header">GFA & Efficiency</div>
+        <div class="dash-row"><span>Total Allowed GFA:</span> <span class="dash-val" id="dash-allowed-gfa">0</span></div>
+        <div class="dash-row"><span>Consumed GFA:</span> <span class="dash-val" id="dash-consumed-gfa">0</span></div>
+        <div class="dash-row"><span>Balance:</span> <span class="dash-val" id="dash-balance-gfa">0</span></div>
+        <div class="dash-row"><span>Total Built-Up Area (BUA):</span> <span class="dash-val" id="dash-bua">0</span></div>
+        <div class="dash-row"><span>Efficiency (GFA/BUA):</span> <span class="dash-val" id="dash-efficiency">0%</span></div>
+
+        <div class="dash-row header">GFA Breakdown</div>
+        <div class="dash-row"><span>Residential:</span> <span class="dash-val" id="dash-res-gfa">0</span></div>
+        <div class="dash-row"><span>Retail:</span> <span class="dash-val" id="dash-retail-gfa">0</span></div>
+        <div class="dash-row"><span>Office:</span> <span class="dash-val" id="dash-office-gfa">0</span></div>
+        <div class="dash-row"><span>Nursery:</span> <span class="dash-val" id="dash-nursery-gfa">0</span></div>
+
+        <div class="dash-row header">Residential Stats</div>
+        <div class="dash-row"><span>Sellable Area:</span> <span class="dash-val" id="dash-sellable">0</span></div>
+
+        <div class="dash-row header">Utilities</div>
+        <div class="dash-row"><span>Elec Load:</span> <span class="dash-val" id="dash-elec-load">0 kVA</span></div>
+        <div class="dash-row"><span>Water Req:</span> <span class="dash-val" id="dash-water-req">0 m³/d</span></div>
+        <div class="dash-row header" style="font-size:0.9em; margin-top:5px; background:#e3f2fd; color:#0d47a1;">Substation</div>
+        <div class="dash-row"><span>RMU Area Provided:</span> <span class="dash-val" id="dash-rmu-area">0 m²</span></div>
+        <div class="dash-row"><span>Substation Area Req:</span> <span class="dash-val" id="dash-substation-req">0 m²</span></div>
+        <div class="dash-sub">(Calculated: Load based - RMU)</div>
+    </div>
+</div>
+
+<!-- 3D Modal -->
+<div id="threed-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:3000;">
+    <button id="close-threed-modal" style="position:absolute; top:20px; right:20px; z-index:3001;" class="danger">Close 3D</button>
+    <canvas id="threed-canvas" style="width:100%; height:100%;"></canvas>
+</div>
+
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js";
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+
+// --- GLOBAL VARIABLES ---
+let canvas; // Global Fabric Canvas Instance
+let threeScene, threeCamera, threeRenderer, threeControls;
+
+const state = {
+    currentMode: null,
+    scale: { ratio: 0, pixels: 0, meters: 0 },
+    currentLevel: 'Typical_Floor',
+    levels: {
+        'Basement': { objects: [], color: 'rgba(128, 128, 128, 0.4)' },
+        'Ground_Floor': { objects: [], color: 'rgba(156, 39, 176, 0.4)' },
+        'Podium': { objects: [], color: 'rgba(76, 175, 80, 0.4)' },
+        'Typical_Floor': { objects: [], color: 'rgba(255, 255, 0, 0.4)' },
+        'Roof': { objects: [], color: 'rgba(63, 81, 181, 0.4)' }
+    },
+    plotPolygon: null,
+    serviceBlocks: [],
+    wingCounter: 0,
+    serviceBlockCounter: 1,
+    plotEdgeProperties: [],
+    selectedPlotEdges: [],
+    setbackGuides: [],
+    dxfOverlayGroup: null,
+    projectType: 'Residential',
+    
+    // Drawing states
+    polyPoints: [],
+    activeLine: null,
+    scaleStart: null,
+    isPanning: false,
+    lastPan: {x:0, y:0}
+};
+
+const LEVEL_ORDER = ['Basement', 'Ground_Floor', 'Podium', 'Typical_Floor', 'Roof'];
+
+// --- BLOCK DATA ---
+const PREDEFINED_BLOCKS = {
+    'Substation': { name: 'Substation', width: 6, height: 5, category: 'service' },
+    'RMU_Room': { name: 'RMU Room', width: 3, height: 3, category: 'service' },
+    'Garbage_Room': { name: 'Garbage Room', width: 4, height: 3, category: 'service' },
+    'Lift_Core': { name: 'Lift Core', width: 8, height: 3, category: 'service' },
+    'Staircase': { name: 'Staircase', width: 6, height: 3, category: 'gfa' },
+    'Electrical_Room': { name: 'Electrical Room', width: 3, height: 3, category: 'service' },
+    'Pump_Room': { name: 'Pump Room', width: 5, height: 5, category: 'service' },
+    '1BHK_Unit': { name: '1 BHK Unit', width: 8, height: 10, category: 'gfa' },
+    '2BHK_Unit': { name: '2 BHK Unit', width: 10, height: 12, category: 'gfa' }
+};
+
+const BLOCK_COLORS = {
+    gfa: { fill: 'rgba(0, 200, 83, 0.5)', stroke: '#00c853' },
+    service: { fill: 'rgba(213, 0, 0, 0.5)', stroke: '#d50000' },
+    default: { fill: 'rgba(128, 0, 128, 0.5)', stroke: '#800080' }
+};
+
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    initCanvas();
+    initUI();
+    setupEventListeners();
+    updateDashboard();
+    init3D();
+});
+
+function initCanvas() {
+    const canvasEl = document.getElementById('plot-canvas');
+    canvasEl.width = document.querySelector('.canvas-container-wrapper').clientWidth;
+    canvasEl.height = 600;
+
+    canvas = new fabric.Canvas('plot-canvas', { 
+        selection: true,
+        preserveObjectStacking: true
+    });
+    
+    // Resize handling
+    window.addEventListener('resize', () => {
+        const wrapper = document.querySelector('.canvas-container-wrapper');
+        canvas.setWidth(wrapper.clientWidth);
+        document.getElementById('overlay-canvas').width = wrapper.clientWidth;
+    });
+
+    // Event Hooks
+    canvas.on('object:modified', (e) => {
+        updateSelectedObjectControls(e.target);
+        updateDashboard();
+        if(e.target.isFootprint) updateLevelFootprintInfo();
+    });
+    canvas.on('object:scaling', updateDashboard);
+    canvas.on('object:moving', updateDashboard);
+    canvas.on('selection:created', (e) => updateSelectedObjectControls(e.target));
+    canvas.on('selection:updated', (e) => updateSelectedObjectControls(e.target));
+    canvas.on('selection:cleared', () => updateSelectedObjectControls(null));
+    
+    // Drawing Hooks
+    canvas.on('mouse:down', handleMouseDown);
+    canvas.on('mouse:move', handleMouseMove);
+    canvas.on('mouse:dblclick', handleDblClick);
+}
+
+function initUI() {
+    // Level Buttons
+    const selector = document.getElementById('level-selector');
+    LEVEL_ORDER.forEach(lvl => {
+        const btn = document.createElement('button');
+        btn.textContent = lvl.replace('_', ' ');
+        btn.dataset.level = lvl;
+        btn.addEventListener('click', () => setLevel(lvl));
+        selector.appendChild(btn);
+    });
+    setLevel('Typical_Floor');
+
+    // Service Blocks
+    const blockSelect = document.getElementById('serviceBlockType');
+    Object.keys(PREDEFINED_BLOCKS).forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = PREDEFINED_BLOCKS[key].name;
+        blockSelect.appendChild(opt);
+    });
+}
+
+function setupEventListeners() {
+    // Dashboard
+    document.getElementById('floating-header').addEventListener('click', toggleFloatingPanel);
+    document.querySelectorAll('.param-input').forEach(inp => inp.addEventListener('input', updateDashboard));
+    document.getElementById('manual-plot-area').addEventListener('input', updateDashboard);
+
+    // Tools
+    document.getElementById('set-scale-btn').addEventListener('click', startScale);
+    document.getElementById('draw-plot-btn').addEventListener('click', () => enterMode('drawingPlot'));
+    document.getElementById('draw-building-btn').addEventListener('click', () => enterMode('drawingBuilding'));
+    
+    // Blocks
+    document.getElementById('add-block-btn').addEventListener('click', placeServiceBlock);
+    document.getElementById('toggle-lock-btn').addEventListener('click', toggleBlockLock);
+    document.getElementById('block-width').addEventListener('change', (e) => updateBlockDim('width', e.target.value));
+    document.getElementById('block-height').addEventListener('change', (e) => updateBlockDim('height', e.target.value));
+    document.getElementById('delete-block-btn').addEventListener('click', deleteSelectedObject);
+    document.getElementById('rotate-90-btn').addEventListener('click', () => {
+        const obj = canvas.getActiveObject();
+        if(obj) { obj.rotate((obj.angle||0)+90); canvas.requestRenderAll(); updateDashboard(); }
+    });
+    document.getElementById('align-block-btn').addEventListener('click', () => alert("Align functionality requires implementing 'getNearestEdge' logic from drawingTools."));
+
+    // File I/O
+    document.getElementById('plan-upload').addEventListener('change', handlePlanUpload);
+    document.getElementById('dxf-upload').addEventListener('change', handleDxfUpload);
+    document.getElementById('export-xml-btn').addEventListener('click', () => alert("Export XML logic goes here"));
+    
+    // Misc
+    document.getElementById('generate3dBtn').addEventListener('click', generate3D);
+    document.getElementById('close-threed-modal').addEventListener('click', () => document.getElementById('threed-modal').style.display = 'none');
+}
+
+// --- ENGINE LOGIC ---
+
+function updateDashboard() {
+    const inputs = {
+        allowedGfa: parseFloat(document.getElementById('allowedGfa').value) || 0,
+        retail: parseFloat(document.getElementById('allowedRetailGfa').value) || 0,
+        office: parseFloat(document.getElementById('allowedOfficeGfa').value) || 0,
+        nursery: parseFloat(document.getElementById('allowedNurseryGfa').value) || 0,
+        basements: parseFloat(document.getElementById('numBasements').value) || 0,
+        podiums: parseFloat(document.getElementById('numPodiums').value) || 0,
+        floors: parseFloat(document.getElementById('numTypicalFloors').value) || 0
+    };
+
+    // 1. Plot Area
+    let plotArea = 0;
+    const manualArea = parseFloat(document.getElementById('manual-plot-area').value);
+    if (manualArea > 0) {
+        plotArea = manualArea;
+        document.getElementById('plot-info').textContent = `Manual Area: ${manualArea} m²`;
+    } else if (state.plotPolygon && state.scale.ratio > 0) {
+        plotArea = getPolyArea(state.plotPolygon);
+        document.getElementById('plot-info').textContent = `Calc Area: ${plotArea.toFixed(1)} m²`;
+    }
+
+    // 2. Footprint Area (Typical)
+    let typFootprintArea = 0;
+    state.levels['Typical_Floor'].objects.forEach(obj => typFootprintArea += getPolyArea(obj));
+
+    // 3. Calculations
+    const grossTypGfa = typFootprintArea * inputs.floors;
+    const resGfa = Math.max(0, grossTypGfa - (inputs.retail + inputs.office + inputs.nursery)); 
+    const consumedGfa = resGfa + inputs.retail + inputs.office + inputs.nursery;
+    const balance = inputs.allowedGfa - consumedGfa;
+
+    // BUA estimate
+    const carsReq = (resGfa/100) + (inputs.retail/50) + (inputs.office/50);
+    const parkingArea = carsReq * 35; 
+    const bua = consumedGfa + parkingArea + (inputs.basements * plotArea * 0.85) + (inputs.podiums * plotArea * 0.7);
+    const efficiency = bua > 0 ? ((consumedGfa / bua) * 100).toFixed(1) : 0;
+
+    // Utility Estimates
+    const elecLoad = (resGfa * 0.08) + (inputs.retail * 0.15) + (inputs.office * 0.12);
+    const waterReq = (resGfa / 100 * 3 * 0.25); // 250L/person
+
+    // Substation Logic (Load - RMU)
+    let rmuArea = 0;
+    state.serviceBlocks.forEach(g => {
+        if(g.blockData && g.blockData.name === 'RMU Room') rmuArea += getObjectArea(g);
+    });
+    let subReq = Math.ceil(elecLoad / 1500) * 35; 
+    if(rmuArea > 0) subReq = Math.max(0, subReq - 10); // Logic: RMU reduces sub size
+
+    // --- UPDATE DOM ---
+    setDash('dash-allowed-gfa', inputs.allowedGfa);
+    setDash('dash-consumed-gfa', consumedGfa.toFixed(0));
+    setDash('dash-balance-gfa', balance.toFixed(0), balance >= 0 ? 'good' : 'bad');
+    setDash('dash-bua', bua.toFixed(0));
+    setDash('dash-efficiency', efficiency + '%');
+    
+    setDash('dash-res-gfa', resGfa.toFixed(0));
+    setDash('dash-retail-gfa', inputs.retail);
+    setDash('dash-office-gfa', inputs.office);
+    setDash('dash-nursery-gfa', inputs.nursery);
+    setDash('dash-sellable', (resGfa * 0.85).toFixed(0));
+
+    setDash('dash-elec-load', elecLoad.toFixed(0) + ' kVA');
+    setDash('dash-water-req', waterReq.toFixed(0) + ' m³/d');
+    setDash('dash-rmu-area', rmuArea.toFixed(1) + ' m²');
+    setDash('dash-substation-req', subReq.toFixed(0) + ' m²');
+}
+
+function setDash(id, val, cls) {
+    const el = document.getElementById(id);
+    if(el) {
+        el.textContent = val;
+        el.className = 'dash-val ' + (cls||'');
+    }
+}
+
+function toggleFloatingPanel() {
+    const el = document.getElementById('floating-content');
+    el.classList.toggle('minimized');
+    document.getElementById('minimize-dash').textContent = el.classList.contains('minimized') ? '+' : '−';
+}
+
+// --- UTILS ---
+function getPolyArea(obj) {
+    if(!obj || !obj.points || !state.scale.ratio) return 0;
+    let area = 0;
+    const pts = obj.points;
+    for(let i=0; i<pts.length; i++) {
+        let j = (i+1)%pts.length;
+        area += pts[i].x * pts[j].y;
+        area -= pts[j].x * pts[i].y;
+    }
+    return (Math.abs(area)/2) * (state.scale.ratio**2) * obj.scaleX * obj.scaleY;
+}
+
+function getObjectArea(obj) {
+    return (obj.getScaledWidth() * obj.getScaledHeight()) * (state.scale.ratio**2);
+}
+
+function enterMode(mode) {
+    state.currentMode = mode;
+    canvas.discardActiveObject().renderAll();
+    document.getElementById('status-bar').textContent = mode ? "Mode: " + mode : "Ready";
+}
+
+// --- DRAWING & WING NAMING ---
+function handleMouseDown(o) {
+    const ptr = canvas.getPointer(o.e);
+
+    // Scaling
+    if(state.currentMode === 'settingScale') {
+        if(!state.scaleStart) {
+            state.scaleStart = ptr;
+            document.getElementById('status-bar').textContent = "Click End Point.";
+        } else {
+            finishScale(ptr);
+        }
+        return;
+    }
+
+    // Polygons
+    if(state.currentMode === 'drawingPlot' || state.currentMode === 'drawingBuilding') {
+        state.polyPoints.push(ptr);
+        if(state.polyPoints.length > 1) {
+            const p1 = state.polyPoints[state.polyPoints.length-2];
+            const line = new fabric.Line([p1.x, p1.y, ptr.x, ptr.y], {
+                stroke: '#555', strokeWidth: 1, selectable: false
+            });
+            canvas.add(line);
+        }
+    }
+}
+
+function handleMouseMove(o) {
+    // Rubber band logic could go here
+}
+
+function handleDblClick() {
+    if(state.currentMode === 'drawingPlot' || state.currentMode === 'drawingBuilding') {
+        state.polyPoints.pop(); // Remove double-click point
+        finishPolygon();
+    }
+}
+
+function finishPolygon() {
+    if(state.polyPoints.length < 3) { state.polyPoints=[]; return; }
+    
+    const isPlot = state.currentMode === 'drawingPlot';
+    const color = isPlot ? 'rgba(0,0,255,0.1)' : state.levels[state.currentLevel].color;
+    
+    const poly = new fabric.Polygon(state.polyPoints, {
+        fill: color, stroke: isPlot?'blue':'black', strokeWidth:1,
+        selectable: true, isPlot: isPlot, isFootprint: !isPlot,
+        level: isPlot ? 'Plot' : state.currentLevel
+    });
+
+    // WING NAMING
+    if(!isPlot) {
+        const wingName = `Wing ${String.fromCharCode(65 + state.wingCounter++)}`;
+        poly.wingName = wingName;
+        
+        const center = poly.getCenterPoint();
+        const text = new fabric.Text(wingName, {
+            fontSize: 16, left: center.x, top: center.y, originX: 'center', originY: 'center', fill:'#333'
+        });
+        canvas.add(text);
+        state.levels[state.currentLevel].objects.push(poly);
+        updateLevelFootprintInfo();
+    } else {
+        if(state.plotPolygon) canvas.remove(state.plotPolygon);
+        state.plotPolygon = poly;
+    }
+
+    canvas.add(poly);
+    canvas.renderAll();
+    state.polyPoints = [];
+    enterMode(null);
+    updateDashboard();
+}
+
+function updateLevelFootprintInfo() {
+    const list = document.getElementById('level-footprint-info');
+    let html = `<b>${state.currentLevel.replace('_',' ')} Wings:</b><ul>`;
+    state.levels[state.currentLevel].objects.forEach(obj => {
+        html += `<li>${obj.wingName||'Unnamed'} (${getPolyArea(obj).toFixed(1)} m²)</li>`;
+    });
+    html += "</ul>";
+    list.innerHTML = html;
+}
+
+// --- SERVICE BLOCKS & LOCKING ---
+function placeServiceBlock() {
+    if(state.scale.ratio === 0) { alert("Set Scale first!"); return; }
+    
+    const selects = document.getElementById('serviceBlockType').selectedOptions;
+    Array.from(selects).forEach(opt => {
+        const data = PREDEFINED_BLOCKS[opt.value];
+        const w = data.width / state.scale.ratio;
+        const h = data.height / state.scale.ratio;
+        const clr = BLOCK_COLORS[data.category] || BLOCK_COLORS.default;
+
+        const rect = new fabric.Rect({ width: w, height: h, fill: clr.fill, stroke: clr.stroke });
+        const text = new fabric.Text(data.name, { fontSize: w*0.2, left: w/2, top: h/2, originX:'center', originY:'center', fill:'black' });
+        const lockIcon = new fabric.Text("🔒", { fontSize: 12, left: 2, top: 2 });
+
+        const group = new fabric.Group([rect, text, lockIcon], {
+            left: canvas.width/2 + (Math.random()*50), 
+            top: canvas.height/2 + (Math.random()*50),
+            isServiceBlock: true, blockData: data, level: state.currentLevel,
+            lockScalingX: true, lockScalingY: true // Default Locked
+        });
+
+        state.serviceBlocks.push(group);
+        canvas.add(group);
+        canvas.setActiveObject(group);
+    });
+    updateDashboard();
+}
+
+function toggleBlockLock() {
+    const obj = canvas.getActiveObject();
+    if(!obj || !obj.isServiceBlock) return;
+
+    const isLocked = obj.lockScalingX;
+    obj.set({ lockScalingX: !isLocked, lockScalingY: !isLocked });
+    
+    // Update Visual Icon (Index 2 is lock)
+    const items = obj.getObjects();
+    if(items[2]) items[2].set('text', !isLocked ? "🔒" : ""); // Hide if unlocked
+    
+    obj.setCoords();
+    canvas.requestRenderAll();
+    updateSelectedObjectControls(obj);
+}
+
+function updateSelectedObjectControls(obj) {
+    const pane = document.getElementById('selected-object-controls');
+    const btn = document.getElementById('toggle-lock-btn');
+    
+    if(!obj) { pane.classList.add('hidden'); return; }
+    pane.classList.remove('hidden');
+
+    if(obj.isServiceBlock) {
+        const locked = obj.lockScalingX;
+        btn.className = locked ? "lock-btn locked" : "lock-btn unlocked";
+        btn.dataset.status = locked ? "LOCKED" : "UNLOCKED";
+        
+        document.getElementById('block-width').value = (obj.getScaledWidth() * state.scale.ratio).toFixed(2);
+        document.getElementById('block-height').value = (obj.getScaledHeight() * state.scale.ratio).toFixed(2);
+    }
+}
+
+function updateBlockDim(dim, val) {
+    const obj = canvas.getActiveObject();
+    if(!obj || !obj.isServiceBlock) return;
+    const px = parseFloat(val) / state.scale.ratio;
+    if(dim === 'width') obj.scaleToWidth(px);
+    else obj.scaleToHeight(px);
+    obj.setCoords();
+    canvas.requestRenderAll();
+    updateDashboard();
+}
+
+function deleteSelectedObject() {
+    const obj = canvas.getActiveObject();
+    if(obj) {
+        if(obj.isServiceBlock) state.serviceBlocks = state.serviceBlocks.filter(b => b !== obj);
+        if(obj.isFootprint) {
+            const arr = state.levels[state.currentLevel].objects;
+            const idx = arr.indexOf(obj);
+            if(idx > -1) arr.splice(idx, 1);
+            updateLevelFootprintInfo();
+        }
+        canvas.remove(obj);
+        canvas.discardActiveObject();
+        updateDashboard();
+    }
+}
+
+// --- SCALE & HELPERS ---
+function startScale() {
+    state.currentMode = 'settingScale';
+    state.scaleStart = null;
+    document.getElementById('status-bar').textContent = "Click Start of known distance.";
+}
+
+function finishScale(endPtr) {
+    const distPx = Math.hypot(endPtr.x - state.scaleStart.x, endPtr.y - state.scaleStart.y);
+    const distM = parseFloat(document.getElementById('scale-distance').value);
+    if(distPx > 0) {
+        state.scale.ratio = distM / distPx;
+        document.getElementById('scale-display').textContent = `1m = ${(1/state.scale.ratio).toFixed(2)}px`;
+        
+        const line = new fabric.Line([state.scaleStart.x, state.scaleStart.y, endPtr.x, endPtr.y], { stroke:'red', strokeWidth:2, selectable:false });
+        canvas.add(line);
+        
+        document.getElementById('draw-plot-btn').disabled = false;
+        document.getElementById('draw-building-btn').disabled = false;
+        document.getElementById('add-block-btn').disabled = false;
+        document.getElementById('calculateBtn').disabled = false;
+    }
+    enterMode(null);
+}
+
+function setLevel(lvl) {
+    state.currentLevel = lvl;
+    document.querySelectorAll('#level-selector button').forEach(b => {
+        b.classList.toggle('active', b.dataset.level === lvl);
+    });
+    updateLevelFootprintInfo();
+    
+    // Simple Layer Visibility Toggle
+    canvas.getObjects().forEach(o => {
+        if(o.level && o.level !== 'Plot' && !o.isServiceBlock) { // Keep service blocks visible for demo
+            o.visible = (o.level === lvl);
+        }
+    });
+    canvas.requestRenderAll();
+}
+
+// --- FILE HANDLING ---
+function handlePlanUpload(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (f) => {
+        fabric.Image.fromURL(f.target.result, (img) => {
+            const scale = Math.min(canvas.width/img.width, canvas.height/img.height);
+            canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), { scaleX: scale, scaleY: scale });
+            document.getElementById('set-scale-btn').disabled = false;
+            document.getElementById('scale-distance').disabled = false;
+        });
+    };
+    reader.readAsDataURL(file);
+}
+
+function handleDxfUpload(e) {
+    alert("DXF Parsing hooked up. Implement specific Entity generation logic here.");
+}
+
+// --- 3D LOGIC ---
+function init3D() {
+    const el = document.getElementById('threed-canvas');
+    threeScene = new THREE.Scene();
+    threeScene.background = new THREE.Color(0x333333);
+    
+    threeCamera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    threeCamera.position.set(0, -100, 100);
+    
+    threeRenderer = new THREE.WebGLRenderer({ canvas: el, antialias: true });
+    threeControls = new OrbitControls(threeCamera, threeRenderer.domElement);
+    
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(10, 10, 50);
+    threeScene.add(light);
+    threeScene.add(new THREE.AmbientLight(0x404040));
+}
+
+function generate3D() {
+    if(state.scale.ratio === 0) { alert("Set Scale first!"); return; }
+    
+    // Clear previous
+    while(threeScene.children.length > 2) { 
+        threeScene.remove(threeScene.children[threeScene.children.length-1]); 
+    }
+
+    // Loop levels and extrude
+    let zOffset = 0;
+    LEVEL_ORDER.forEach((lvl) => {
+        const objs = state.levels[lvl].objects;
+        const height = 3.5; // meters
+        
+        objs.forEach(poly => {
+            const pts = poly.points.map(p => new THREE.Vector2(
+                (p.x - 0) * state.scale.ratio, // Center offset logic skipped for brevity
+                (p.y - 0) * state.scale.ratio * -1
+            ));
+            
+            const shape = new THREE.Shape(pts);
+            const geom = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
+            const mat = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff, opacity: 0.8, transparent: true });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.z = zOffset;
+            threeScene.add(mesh);
+        });
+        
+        zOffset += height;
+    });
+
+    document.getElementById('threed-modal').style.display = 'block';
+    requestAnimationFrame(animate3D);
+}
+
+function animate3D() {
+    if(document.getElementById('threed-modal').style.display === 'none') return;
+    requestAnimationFrame(animate3D);
+    threeControls.update();
+    threeRenderer.render(threeScene, threeCamera);
+}
+
+</script>
+</body>
+</html>
