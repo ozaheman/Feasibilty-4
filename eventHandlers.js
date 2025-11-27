@@ -1,14 +1,14 @@
 // MAIN EXECUTION & INITIALIZATION
 // =====================================================================
 import { initCanvas, resetZoom,renderPdfToBackground,zoomCanvas ,getCanvas ,clearOverlay ,setCanvasBackground ,getOverlayContext ,redrawApartmentPreview, zoomToObject  } from './canvasController.js';
-import { resetState,setCurrentLevel,state,setCurrentMode,setScale, toggleAllLayersVisibility   } from './state.js';
+import { resetState,setCurrentLevel,state,setCurrentMode,setScale, toggleAllLayersVisibility ,rehydrateProgram  } from './state.js';
 import { initDrawingTools,handleDblClick, getSetbackPolygonPoints,handleCanvasMouseMove,clearSetbackGuides,clearEdgeHighlight,updateAlignmentHighlight,resetDrawingState,handleCanvasMouseDown,clearEdgeSnapIndicator ,finishScaling,drawSetbackGuides,findSnapPoint ,updateSnapIndicators,drawMeasurement, getClickedPlotEdge, getNearestEdge, snapObjectToEdge, alignObjectToEdge           } from './drawingTools.js'; 
 import { regenerateParkingInGroup, generateLinearParking   } from './parkingLayoutUtils.js';
 import { init3D,generate3DBuilding , generateOpenScadScript  } from './viewer3d.js';
 import { initUI, updateUI,displayHotelRequirements ,placeSelectedComposite, handleConfirmLevelOp  ,applyLevelVisibility ,updateLevelFootprintInfo ,renderServiceBlockList,updateSelectedObjectControls , openLevelOpModal,updateParkingDisplay,toggleFloatingPanel,updateDashboard,toggleBlockLock, saveUnitChanges, openNewCompositeEditor, editSelectedComposite, deleteSelectedComposite, saveCompositeChanges, addSubBlockToCompositeEditor, applyScenario, toggleApartmentMode, openEditUnitModal,updateLevelCounts, populateServiceBlocksDropdown, updateProgramUI      } from './uiController.js';
 import { exportReportAsPDF,generateReport  } from './reportGenerator.js';
 import { PROJECT_PROGRAMS, AREA_STATEMENT_DATA ,PREDEFINED_BLOCKS , BLOCK_CATEGORY_COLORS } from './config.js';
-import { allocateCountsByPercent, getPolygonProperties } from './utils.js';
+import { allocateCountsByPercent, getPolygonProperties, getOffsetPolygon } from './utils.js';
 import { layoutFlatsOnPolygon } from './apartmentLayout.js';
 import { handleDxfUpload, assignDxfAsPlot,finalizeDxf,deleteDxf,updateDxfStrokeWidth, exportProjectXML, importProjectXML  } from './io.js';
 
@@ -72,6 +72,7 @@ export function setupEventListeners() {
     document.getElementById('draw-guide-btn').addEventListener('click', () => enterMode('drawingGuide'));
     document.getElementById('draw-building-btn').addEventListener('click', () => enterMode('drawingBuilding'));
     document.getElementById('footprint-from-setbacks-btn').addEventListener('click', createFootprintFromSetbacks);
+    document.getElementById('footprint-from-plot-btn').addEventListener('click', createFootprintFromPlot);
     document.getElementById('draw-parking-btn').addEventListener('click', () => enterMode('drawingParking'));
     document.getElementById('draw-bus-bay-btn').addEventListener('click', () => enterMode('drawingBusBay'));
     document.getElementById('draw-loading-bay-btn').addEventListener('click', () => enterMode('drawingLoadingBay'));
@@ -326,7 +327,8 @@ export async function handlePlanUpload(e) {
 export async function handlePdfPageChange() {
     if (currentPdfData) {
         const pageNum = parseInt(document.getElementById('pdf-page').value) || 1;
-        await renderPdfToBackground(currentPdfData, pageNum);
+        const img = await renderPdfToBackground(currentPdfData, pageNum);
+        setCanvasBackground(img);
     }
 }
 export function createFootprintFromSetbacks() {
@@ -336,6 +338,28 @@ export function createFootprintFromSetbacks() {
         return;
     }
     const footprintPolygon = new fabric.Polygon(setbackPoints, { objectCaching: false, });
+    handleFinishPolygon(footprintPolygon, 'drawingBuilding');
+}
+
+export function createFootprintFromPlot() {
+    if (!state.plotPolygon || !state.plotPolygon.points) {
+        document.getElementById('status-bar').textContent = "No plot boundary drawn to create a footprint from.";
+        return;
+    }
+    let points = state.plotPolygon.points;
+
+    // Apply 1m offset for basements
+    if (state.currentLevel.startsWith('Basement') && state.scale.ratio > 0) {
+        const offsetDist = 1 / state.scale.ratio; // 1 meter offset in pixels
+        points = getOffsetPolygon(points, offsetDist);
+    }
+
+    if (points.length < 3) {
+        document.getElementById('status-bar').textContent = "Could not generate footprint from plot boundary.";
+        return;
+    }
+
+    const footprintPolygon = new fabric.Polygon(points, { objectCaching: false });
     handleFinishPolygon(footprintPolygon, 'drawingBuilding');
 }
 
@@ -407,6 +431,41 @@ export function  handlePreviewLayout(event) {
     btn.classList.add('active');
     state.canvas.requestRenderAll();
 }
+
+async function checkAndRescalePdf() {
+    const bg = state.canvas.backgroundImage;
+    const pageNum = parseInt(document.getElementById('pdf-page').value) || 1;
+
+    // Check if the background is a PDF we can re-render and if a scale has been set
+    if (currentPdfData && bg && bg.isPdf && bg.renderingScale && state.scale.ratio > 0) {
+        const pixelsPerMeter = 1 / state.scale.ratio;
+        const targetPixelsPerMeter = 100; // Target resolution: 100px per meter (1cm on screen = 1px)
+
+        // Only rescale if current resolution is lower than target
+        if (pixelsPerMeter < targetPixelsPerMeter) {
+            document.getElementById('status-bar').textContent = 'Optimizing plan resolution... Please wait.';
+            const scaleFactor = targetPixelsPerMeter / pixelsPerMeter;
+            const newRenderingScale = bg.renderingScale * scaleFactor;
+            // Cap the rendering scale to avoid creating enormous textures (e.g., max 8x)
+            const finalRenderingScale = Math.min(newRenderingScale, 8.0);
+
+            // Re-render the PDF with the new, higher resolution
+            const newBgImage = await renderPdfToBackground(currentPdfData, pageNum, finalRenderingScale);
+
+            // Calculate a correction factor based on the change in pixel dimensions
+            const correctionFactor = newBgImage.width / bg.width;
+
+            // Apply the new background image
+            setCanvasBackground(newBgImage);
+            
+            // IMPORTANT: Update the application's scale to match the new background resolution
+            const newPixelDistance = state.scale.pixelDistance * correctionFactor;
+            setScale(newPixelDistance, state.scale.realDistance);
+        }
+    }
+}
+
+
 export function handleMouseDown(o) {
     const pointer = state.canvas.getPointer(o.e);
 
@@ -450,7 +509,8 @@ export function handleMouseDown(o) {
             const scaleData = finishScaling();
             if (scaleData) {
                 setScale(scaleData.pixels, scaleData.meters);
-                scaleReady = true;
+                // After setting scale, check if the PDF background needs higher resolution
+                checkAndRescalePdf();
             } else {
                  document.getElementById('status-bar').textContent = "Invalid length provided. Please enter a number in the 'Known Distance' field.";
             }
@@ -588,6 +648,8 @@ export function  handleProjectTypeChange(e) {
         const newProgramData = JSON.parse(JSON.stringify(newProgramMaster));
         state.currentProgram = rehydrateProgram(newProgramData, newProgramMaster);
     } else { state.currentProgram = null; }
+    document.getElementById('hotel-classification-wrapper').style.display = (state.projectType === 'Hotel') ? 'block' : 'none';
+    document.getElementById('labour-camp-settings').style.display = (state.projectType === 'LabourCamp') ? 'block' : 'none';
     updateProgramUI();
     updateParkingDisplay();
     updateUI();

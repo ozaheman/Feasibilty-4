@@ -1,8 +1,9 @@
+
 import { PROJECT_PROGRAMS } from './config.js';
 import { RESIDENTIAL_PROGRAM } from './residentialProgram.js';
 import { LEVEL_DEFINITIONS, PREDEFINED_COMPOSITE_BLOCKS } from './config.js';
 
-function rehydrateProgram(plainProgram, masterProgram) {
+export function rehydrateProgram(plainProgram, masterProgram) {
     if (!plainProgram || !masterProgram) return null;
     Object.assign(plainProgram, {
         parkingRule: masterProgram.parkingRule,
@@ -51,6 +52,8 @@ export function setCurrentMode(mode) {
 }
 export function setScale(pixels, meters) {
     _state.scale = { pixels, meters, ratio: meters > 0 && pixels > 0 ? meters / pixels : 0 };
+    _state.scale.pixelDistance = pixels;
+    _state.scale.realDistance = meters;
 }
 export function setCurrentLevel(levelName) {
     if (_state.levels[levelName]) {

@@ -1,8 +1,7 @@
 import { state} from './state.js';
 import { ensureCounterClockwise,getOffsetPolygon,getPolygonAreaFromPoints, getPolygonBoundingBox    } from './utils.js';
-   let balconyOffsetPx = 0 ;
-           let  unitOffsetPx = 0;
-            let outerCorridorOffsetMeters= 0;
+import { updateDashboard } from './uiController.js';
+
 export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = true, calcMode = 'center', doubleLoaded = false) {
     if (!counts || !poly || !poly.points || poly.points.length < 3 || state.scale.ratio === 0) {
         return { placedFlats: [], outerCorridorPolyPoints: [], innerCorridorPolyPoints: [], corridorArea: 0 };
@@ -72,10 +71,8 @@ export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = t
         let currentDistMeters;
 
         if (calcMode === 'center') {
-            // For 'Fit from Center', calculate the starting offset to center the block of units.
             currentDistMeters = (seg.originalLength - totalPlacedFrontage) / 2;
-        } else { // calcMode === 'offset'
-            // For 'Start to End', always start from the beginning of the segment.
+        } else { 
             currentDistMeters = 0;
         }
 
@@ -85,19 +82,15 @@ export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = t
             const segLenPx = Math.hypot(segVec.x, segVec.y);
             const unitVec = { x: segVec.x / segLenPx, y: segVec.y / segLenPx };
             const centerOnLine = { x: seg.start.x + unitVec.x * centerAlongSegmentPx, y: seg.start.y + unitVec.y * centerAlongSegmentPx };
-            const centerOnLinex = { x: seg.start.x + unitVec.x * 0, y: seg.start.y + unitVec.y * 0 };
+            
             const balconyDepth = (unit.balconyMultiplier || 0);
             const unitDepth = unit.depth;
             let unitOffsetPx, balconyOffsetPx;
- balconyOffsetPx = ((balconyDepth / 2) / state.scale.ratio)*-1 ;
-           
-           unitOffsetPx = (0 + unitDepth / 2) / state.scale.ratio;
+
             if (includeBalconiesInOffset) { // Recessed
-                
                 balconyOffsetPx = (balconyDepth / 2) / state.scale.ratio;
-                unitOffsetPx = (balconyDepth +unitDepth / 2) / state.scale.ratio;
+                unitOffsetPx = (balconyDepth + unitDepth / 2) / state.scale.ratio;
             } else { // Projecting
-                
                 balconyOffsetPx = (-balconyDepth / 2) / state.scale.ratio;
                 unitOffsetPx = (unitDepth / 2) / state.scale.ratio;
             }
@@ -113,15 +106,12 @@ export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = t
     });
 
     const CORRIDOR_WIDTH = doubleLoaded ? 2.0 : 1.8;
-    const avgUnitDepth = program.unitTypes.reduce((acc, u) => acc + u.depth, 0) / program.unitTypes.length;
-    const avgBalconyDepth = includeBalconiesInOffset 
+    const avgUnitDepth = program.unitTypes.length > 0 ? program.unitTypes.reduce((acc, u) => acc + u.depth, 0) / program.unitTypes.length : 0;
+    const avgBalconyDepth = includeBalconiesInOffset && program.unitTypes.length > 0 
         ? program.unitTypes.reduce((acc, u) => acc + (u.balconyMultiplier || 0), 0) / program.unitTypes.length
         : 0;
- if (includeBalconiesInOffset) { // 
-     outerCorridorOffsetMeters = avgBalconyDepth + avgUnitDepth;
- }else{
-   outerCorridorOffsetMeters = avgUnitDepth;  
- }
+
+    const outerCorridorOffsetMeters = avgBalconyDepth + avgUnitDepth;
     const outerCorridorOffsetPx = outerCorridorOffsetMeters / state.scale.ratio;
     const outerCorridorPolyPoints = getOffsetPolygon(ccwPolyPoints, outerCorridorOffsetPx);
 
@@ -130,30 +120,65 @@ export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = t
     const innerCorridorPolyPoints = getOffsetPolygon(ccwPolyPoints, innerCorridorOffsetPx);
 
     if (doubleLoaded) {
-        // Create apartments on the other side of the corridor
         const innerSegments = [];
-        for (let i = 0; i < innerCorridorPolyPoints.length; i++) {
-            const p1 = innerCorridorPolyPoints[i];
-            const p2 = innerCorridorPolyPoints[(i + 1) % innerCorridorPolyPoints.length];
+        const ccwInnerPoly = ensureCounterClockwise(innerCorridorPolyPoints);
+        for (let i = 0; i < ccwInnerPoly.length; i++) {
+            const p1 = ccwInnerPoly[i];
+            const p2 = ccwInnerPoly[(i + 1) % ccwInnerPoly.length];
             const dx = p2.x - p1.x;
             const dy = p2.y - p1.y;
             const lengthPx = Math.hypot(dx, dy);
-            const normal = { x: -dy / lengthPx, y: dx / lengthPx }; // Normal points "inward"
+            const normal = { x: -dy / lengthPx, y: dx / lengthPx };
             innerSegments.push({
                 start: p1, end: p2,
-                availableLength: lengthPx * state.scale.ratio,
-                placedUnits: [],
+                originalLength: lengthPx * state.scale.ratio,
                 angle: Math.atan2(dy, dx),
                 normal: normal,
             });
         }
-        // Simplified re-placement logic for the second side
-        innerSegments.forEach(seg => {
-            const unitsForSide = Math.floor(seg.availableLength / avgUnitDepth);
-            // This is a simplification; a full re-run of the packing algo would be more accurate
-            // For now, let's just mirror the original set for demo
-             segments.find(s => s.angle.toFixed(2) === seg.angle.toFixed(2))?.placedUnits.forEach(unit => {
-                finalPlacedFlats.push({ /* Similar placement logic, but offset from inner corridor */ });
+
+        segments.forEach(outerSeg => {
+            if (outerSeg.placedUnits.length === 0) return;
+            const innerSeg = innerSegments.reduce((best, current) => {
+                 const angleDiff = Math.abs(current.angle - outerSeg.angle);
+                 const bestAngleDiff = Math.abs(best.angle - outerSeg.angle);
+                 return angleDiff < bestAngleDiff ? current : best;
+            }, innerSegments[0]);
+
+            const cornerBufferMeters = 8.0;
+            let currentDistMeters = cornerBufferMeters;
+            
+            const reversedUnits = [...outerSeg.placedUnits].reverse();
+
+            reversedUnits.forEach(unit => {
+                 if (currentDistMeters + unit.frontage <= innerSeg.originalLength - cornerBufferMeters) {
+                    const centerAlongSegmentPx = (currentDistMeters + unit.frontage / 2) / state.scale.ratio;
+                    const segVec = { x: innerSeg.end.x - innerSeg.start.x, y: innerSeg.end.y - innerSeg.start.y };
+                    const segLenPx = Math.hypot(segVec.x, segVec.y);
+                    const unitVec = { x: segVec.x / segLenPx, y: segVec.y / segLenPx };
+                    const centerOnLine = { x: innerSeg.start.x + unitVec.x * centerAlongSegmentPx, y: innerSeg.start.y + unitVec.y * centerAlongSegmentPx };
+                    
+                    const balconyDepth = (unit.balconyMultiplier || 0);
+                    const unitDepth = unit.depth;
+                    
+                    let unitOffsetPx, balconyOffsetPx;
+                    
+                    if (includeBalconiesInOffset) { // Recessed logic for the inner side
+                        balconyOffsetPx = (balconyDepth / 2) / state.scale.ratio;
+                        unitOffsetPx = (balconyDepth + unitDepth / 2) / state.scale.ratio;
+                    } else { // Projecting logic for the inner side
+                        balconyOffsetPx = (-balconyDepth / 2) / state.scale.ratio;
+                        unitOffsetPx = (unitDepth / 2) / state.scale.ratio;
+                    }
+
+                    finalPlacedFlats.push({
+                        type: unit,
+                        center: { x: centerOnLine.x + innerSeg.normal.x * unitOffsetPx, y: centerOnLine.y + innerSeg.normal.y * unitOffsetPx },
+                        balconyCenter: { x: centerOnLine.x + innerSeg.normal.x * balconyOffsetPx, y: centerOnLine.y + innerSeg.normal.y * balconyOffsetPx },
+                        angle: innerSeg.angle 
+                    });
+                    currentDistMeters += unit.frontage;
+                }
             });
         });
     }
@@ -162,11 +187,12 @@ export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = t
     const innerArea = getPolygonAreaFromPoints(innerCorridorPolyPoints);
     const corridorArea = Math.max(0, outerArea - innerArea);
     const staircaseValidation = validateStaircaseDistance(finalPlacedFlats);
-
+    
     return { 
         placedFlats: finalPlacedFlats, 
         outerCorridorPolyPoints, innerCorridorPolyPoints, corridorArea, staircaseValidation
     };
+    
 }
 
 export function validateStaircaseDistance(placedFlats) {

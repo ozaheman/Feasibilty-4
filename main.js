@@ -1,3 +1,4 @@
+
 window.objectToAlign = null;
 window.currentLevelOp = { mode: null, object: null };
 window.currentlyEditingCompositeIndex = -1;

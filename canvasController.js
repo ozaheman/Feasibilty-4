@@ -49,41 +49,61 @@ export function clearCanvasBackground() {
      state.canvas.setWidth(800).setHeight(600);
      syncOverlayCanvasSize();
 }
-export function setCanvasBackground(imageUrl) {
-    fabric.Image.fromURL(imageUrl, (img) => {
-        const mainContent = document.querySelector('.main-content');
-        const maxWidth = mainContent.clientWidth * 0.95;
-        const maxHeight = (window.innerHeight - 150) * 0.9;
-        const scaleFactor = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
-
-        state.canvas.setWidth(img.width * scaleFactor);
-         state.canvas.setHeight(img.height * scaleFactor);
-        syncOverlayCanvasSize();
-         state.canvas.setBackgroundImage(img,  state.canvas.renderAll.bind( state.canvas), {
-            scaleX: scaleFactor,
-            scaleY: scaleFactor
+export function setCanvasBackground(source) {
+    if (typeof source === 'string') {
+        fabric.Image.fromURL(source, (img) => {
+            fitAndSetBg(img);
         });
-    });
+    } else {
+        fitAndSetBg(source);
+    }
 }
-export async function renderPdfToBackground(pdfData, pageNum) {
+
+function fitAndSetBg(fabricImage) {
+    const mainContent = document.querySelector('.main-content');
+    const maxWidth = mainContent.clientWidth * 0.95;
+    const maxHeight = (window.innerHeight - 150) * 0.9;
+    const scaleFactor = Math.min(maxWidth / fabricImage.width, maxHeight / fabricImage.height, 1);
+
+    state.canvas.setWidth(fabricImage.width * scaleFactor);
+    state.canvas.setHeight(fabricImage.height * scaleFactor);
+    syncOverlayCanvasSize();
+    
+    fabricImage.set({
+        scaleX: scaleFactor,
+        scaleY: scaleFactor
+    });
+
+    state.canvas.setBackgroundImage(fabricImage, state.canvas.renderAll.bind(state.canvas));
+}
+
+export async function renderPdfToBackground(pdfData, pageNum, renderScale = 2.0) {
     try {
         const pdf = await pdfjsLib.getDocument(pdfData).promise;
         if (pageNum > pdf.numPages || pageNum < 1) {
             document.getElementById('status-bar').textContent = `Error: Page ${pageNum} does not exist.`;
-            return;
+            return null;
         }
         const page = await pdf.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 });
+        const viewport = page.getViewport({ scale: renderScale });
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = viewport.width;
         tempCanvas.height = viewport.height;
 
         await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport: viewport }).promise;
-        setCanvasBackground(tempCanvas.toDataURL());
+        
+        return new Promise(resolve => {
+            fabric.Image.fromURL(tempCanvas.toDataURL(), (img) => {
+                img.isPdf = true;
+                img.renderingScale = renderScale;
+                resolve(img);
+            });
+        });
 
     } catch (error) {
         console.error('Error rendering PDF:', error);
         document.getElementById('status-bar').textContent = 'Error: Could not render PDF file.';
+        return null;
     }
 }
 export function zoomCanvas(zoomFactor) {

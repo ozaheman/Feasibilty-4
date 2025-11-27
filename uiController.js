@@ -1,5 +1,3 @@
-// MODULE 12: UI CONTROLLER (uiController.js equivalent)
-// =====================================================================
 
 import { LEVEL_ORDER, LEVEL_DEFINITIONS, PREDEFINED_COMPOSITE_BLOCKS ,AREA_STATEMENT_DATA, HOTEL_REQUIREMENTS, PREDEFINED_BLOCKS   } from './config.js';
 import { f,fInt ,getPolygonProperties} from './utils.js';
@@ -47,16 +45,17 @@ export function updateUI() {
     document.getElementById('confirm-footprint-btn').style.display = isEditingFootprint ? 'block' : 'none';
 
     const setScaleBtn = document.getElementById('set-scale-btn');
-    setScaleBtn.disabled = !scaleReady;
+    setScaleBtn.disabled = !state.canvas.backgroundImage;
     setScaleBtn.classList.toggle('active', state.currentMode === 'scaling');
     setScaleBtn.textContent = state.currentMode === 'scaling' ? 'Cancel Scaling' : 'Set Scale';
-    document.getElementById('scale-distance').disabled = !scaleReady;
+    document.getElementById('scale-distance').disabled = !state.canvas.backgroundImage;
 
     document.getElementById('draw-plot-btn').disabled = !scaleSet;
     document.getElementById('measure-tool-btn').disabled = !scaleSet;
     document.getElementById('draw-guide-btn').disabled = !scaleSet;
     document.getElementById('draw-building-btn').disabled = !hasPlot;
     document.getElementById('footprint-from-setbacks-btn').disabled = !hasPlot;
+    document.getElementById('footprint-from-plot-btn').disabled = !hasPlot;
     document.getElementById('edit-setbacks-btn').disabled = !hasPlot;
 
     document.getElementById('add-block-btn').disabled = !scaleSet || !hasAnyFootprint;

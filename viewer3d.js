@@ -1,3 +1,4 @@
+
 import * as THREE from "three";
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { state } from './state.js';
@@ -93,6 +94,7 @@ export function  generate3DBuilding() {
     const showBalconies = document.getElementById('show-balconies-3d').checked;
     const showServiceBlocks = document.getElementById('show-service-blocks-3d').checked;
     const showAffectionPlan = document.getElementById('show-affection-plan-3d').checked;
+    const showTypicalPolygon = document.getElementById('show-typical-polygon-3d').checked;
     
     const allPoints = allFootprints.flatMap(f => f.points);
     const centerOffset = calculateCenterOffset(allPoints);
@@ -124,9 +126,12 @@ export function  generate3DBuilding() {
         for (let i = 0; i < numFloors; i++) {
             // Footprint
             state.levels[levelName].objects.filter(o => o.isFootprint).forEach(footprint => {
-                const mesh = createExtrudedMesh(footprint.points, height, levelDef.color, centerOffset);
-                mesh.position.z = currentZ;
-                buildingGroup.add(mesh);
+                const isTypical = levelName === 'Typical_Floor' || levelName === 'Hotel';
+                if (!isTypical || (isTypical && showTypicalPolygon) || (isTypical && !showApts)) {
+                    const mesh = createExtrudedMesh(footprint.points, height, levelDef.color, centerOffset);
+                    mesh.position.z = currentZ;
+                    buildingGroup.add(mesh);
+                }
 
                 // Apartments
                 if (showApts && state.lastCalculatedData && (levelName === 'Typical_Floor' || levelName === 'Hotel')) {

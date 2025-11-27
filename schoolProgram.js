@@ -1,4 +1,3 @@
-// --- START OF FILE schoolProgram.js ---
 function calculateUnitDimensions(unit) {
     if (!unit.layout || unit.layout.length === 0) {
         unit.frontage = 0;
@@ -32,4 +31,3 @@ export const SCHOOL_PROGRAM = {
     calculateUnitDimensions,
 };
 SCHOOL_PROGRAM.unitTypes.forEach(calculateUnitDimensions);
-// --- END OF FILE schoolProgram.js ---
