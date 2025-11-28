@@ -729,7 +729,8 @@ export function updateDashboard() {
     const carsReq = (resGfa/100) + (inputs.retail/50) + (inputs.office/50);
     const estParkingArea = carsReq * 35; 
     const bua = consumedGfa + estParkingArea + (inputs.basements * plotArea * 0.8) + (inputs.podiums * plotArea * 0.6);
-    const efficiency = bua > 0 ? ((consumedGfa / bua) * 100).toFixed(1) : 0;
+    const efficiency = bua > 0 ? (( bua/ consumedGfa) * 1).toFixed(1) : 0;
+    const efficiency2 = bua > 0 ? (( bua/ consumedGfa) * 1).toFixed(1) : 0;
 
     // 5. Residential
     const sellable = resGfa * 0.85; // 85% efficiency assumption

@@ -55,6 +55,12 @@ export function  performCalculations() {
     const countBlocks = (name) => state.serviceBlocks.filter(b => b.blockId && b.blockId.includes(name)).length;
 
     const calculateNetParkingArea = (levelName) => {
+        // Only calculate parking for these specific levels
+        const validParkingLevels = ['Basement', 'Ground_Floor', 'Podium'];
+        if (!validParkingLevels.includes(levelName)) {
+            return 0;
+        }
+
         const footprintArea = getAreaForLevel(levelName);
         if (footprintArea === 0) return 0;
         const gfaArea = getBlockDetails('gfa', levelName).totalArea;
@@ -178,7 +184,7 @@ export function  performCalculations() {
                 sellableGfa: 0,
                 commonGfa: getAreaOfBlocksByCategory('gfa', levelKey),
                 service: getAreaOfBlocksByCategory('service', levelKey),
-                parking: calculateNetParkingArea(levelKey),
+                parking: calculateNetParkingArea(levelKey), // This will now correctly return 0 for non-parking levels
                 balconyTerrace: 0,
                 total: 0
             };
@@ -194,7 +200,11 @@ export function  performCalculations() {
             } else if (['Office', 'Commercial'].includes(levelKey)) {
                 item.sellableGfa = getAreaForLevel(levelKey);
             } else if (levelKey === 'Roof') {
-                item.balconyTerrace = getAreaOfBlocksByCategory('builtup', levelKey);
+                // Terrace area is handled as 'builtup' category blocks on the roof level
+                const roofFootprintArea = getAreaForLevel(levelKey);
+                const roofGfa = getAreaOfBlocksByCategory('gfa', levelKey);
+                const roofServices = getAreaOfBlocksByCategory('service', levelKey);
+                item.balconyTerrace = Math.max(0, roofFootprintArea - roofGfa - roofServices) + getAreaOfBlocksByCategory('builtup', levelKey);
             }
             
             item.total = (item.sellableGfa + item.commonGfa + item.service + item.parking + item.balconyTerrace) * multiplier;

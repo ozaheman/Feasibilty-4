@@ -172,8 +172,7 @@ export function placeServiceBlock(pointer) {
             originX: 'center', 
             originY: 'center',
             isServiceBlock: true, 
-            blockData:blockData,
-                       
+            blockData:blockData, 
             blockId: blockId, 
             level: state.currentLevel, 
             selectable: true,
@@ -386,6 +385,20 @@ export function  handleCalculate(isLiveUpdate = false, isDetailed = false) {
         state.lastCalculatedData = reportResult.data;
         document.getElementById('report-container').innerHTML = reportResult.html;
         updateParkingDisplay();
+
+        // Attach event listeners to ALL expander elements
+        const expanders = document.querySelectorAll('#report-container .expander');
+        expanders.forEach(expander => {
+            expander.addEventListener('click', (e) => {
+                const targetId = e.currentTarget.getAttribute('data-target');
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    const isHidden = targetElement.style.display === 'none' || !targetElement.style.display;
+                    targetElement.style.display = isHidden ? 'table-row' : 'none';
+                    e.currentTarget.textContent = isHidden ? '[-]' : '[+]';
+                }
+            });
+        });
     } else {
         if (!isLiveUpdate) { 
             document.getElementById('status-bar').textContent = "Could not generate report. Ensure a plot and at least one typical/hotel floor footprint are drawn.";
