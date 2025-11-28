@@ -311,9 +311,13 @@ export function handleCanvasMouseDown(pointer) {
             }
             polygonPoints.push({ x: pointer.x, y: pointer.y });
             if (!currentDrawingPolygon) {
-                currentDrawingPolygon = new fabric.Polyline([...polygonPoints, { x: pointer.x, y: pointer.y }], {
-                    stroke: '#f50057', strokeWidth: 2, fill: 'transparent', selectable: false, evented: false, objectCaching: false, strokeUniform: true,
-                });
+                 const newPoints = [...polygonPoints, { x: pointer.x, y: pointer.y }];
+                 const isClosedPreview = document.getElementById('auto-close-preview-check').checked;
+                 const options = {
+                    stroke: '#f50057', strokeWidth: 2, fill: isClosedPreview ? 'rgba(245, 0, 87, 0.2)' : 'transparent', 
+                    selectable: false, evented: false, objectCaching: false, strokeUniform: true,
+                 };
+                currentDrawingPolygon = isClosedPreview ? new fabric.Polygon(newPoints, options) : new fabric.Polyline(newPoints, options);
                 state.canvas.add(currentDrawingPolygon);
             }
             break;
@@ -341,7 +345,11 @@ export function handleCanvasMouseMove(o) {
         case 'drawingBuilding':
             if (currentDrawingPolygon) {
                 const newPoints = [...polygonPoints, { x: pointer.x, y: pointer.y }];
-                currentDrawingPolygon.set({ points: newPoints });
+                 if (currentDrawingPolygon.type === 'polygon') {
+                    currentDrawingPolygon.set({ points: newPoints });
+                } else {
+                    currentDrawingPolygon.points[currentDrawingPolygon.points.length - 1] = { x: pointer.x, y: pointer.y };
+                }
 
                 const isLayoutLevel = state.currentLevel === 'Typical_Floor' || state.currentLevel === 'Hotel';
                 

@@ -1,4 +1,3 @@
-
 import { LEVEL_ORDER, LEVEL_DEFINITIONS, PREDEFINED_COMPOSITE_BLOCKS ,AREA_STATEMENT_DATA, HOTEL_REQUIREMENTS, PREDEFINED_BLOCKS   } from './config.js';
 import { f,fInt ,getPolygonProperties} from './utils.js';
 import { resetState, state } from './state.js';
@@ -693,8 +692,7 @@ export function displayHotelRequirements() {
 //
 // --- CORE DASHBOARD LOGIC ---
 export function updateDashboard() {
-   // const inputs = {
-        inputs = {
+    const inputs = {
         allowedGfa: parseFloat(document.getElementById('allowedGfa').value) || 0,
         retail: parseFloat(document.getElementById('allowedRetailGfa').value) || 0,
         office: parseFloat(document.getElementById('allowedOfficeGfa').value) || 0,
@@ -721,23 +719,22 @@ export function updateDashboard() {
 
     // 3. GFA Calculation
     const grossTypGfa = typFootprintArea * inputs.floors;
-    const resGfa = Math.max(0, grossTypGfa - (inputs.retail + inputs.office + inputs.nursery));
-    const consumedGfa = resGfa + inputs.retail + inputs.office + inputs.nursery;
+    // Note: The below is a simplification. The detailed report has the source of truth.
+    const resGfa = (state.lastCalculatedData?.areas?.achievedResidentialGfa) || 0;
+    const consumedGfa = (state.lastCalculatedData?.summary?.totalGfa) || (resGfa + inputs.retail + inputs.office + inputs.nursery);
     const balance = inputs.allowedGfa - consumedGfa;
 
     // 4. BUA
-    const carsReq = (resGfa/100) + (inputs.retail/50) + (inputs.office/50);
-    const estParkingArea = carsReq * 35; 
-    const bua = consumedGfa + estParkingArea + (inputs.basements * plotArea * 0.8) + (inputs.podiums * plotArea * 0.6);
-    const efficiency = bua > 0 ? (( bua/ consumedGfa) * 1).toFixed(1) : 0;
-    const efficiency2 = bua > 0 ? (( bua/ consumedGfa) * 1).toFixed(1) : 0;
+    const bua = (state.lastCalculatedData?.summary?.totalBuiltup) || 0;
+    const efficiency = (state.lastCalculatedData?.summary?.efficiency) || 0;
 
     // 5. Residential
-    const sellable = resGfa * 0.85; // 85% efficiency assumption
+    const sellable = (state.lastCalculatedData?.summary?.totalSellable) || 0;
 
     // 6. Utilities
-    const loadKVA = ((resGfa * 0.08) + (inputs.retail * 0.15) + (inputs.office * 0.12)).toFixed(0);
-    const waterReq = (resGfa / 100 * 3 * 0.25).toFixed(0);
+    const totalOccupancy = (state.lastCalculatedData?.lifts?.totalOccupancy || 0);
+    const waterReq = (totalOccupancy * 250 / 1000).toFixed(0); // Assuming 250 L/person/day
+    const garbageBins = Math.ceil(totalOccupancy / 100);
 
     // Substation / RMU
     let rmuArea = 0;
@@ -745,22 +742,21 @@ export function updateDashboard() {
         if(blk.blockData && blk.blockData.name === 'RMU Room') rmuArea += (blk.getScaledWidth() * blk.getScaledHeight() * state.scale.ratio * state.scale.ratio);
     });
     
+    const loadKVA = ((resGfa * 0.08) + (inputs.retail * 0.15) + (inputs.office * 0.12)).toFixed(0);
     let subReqArea = Math.ceil(loadKVA / 1500) * 35;
     if (rmuArea > 0) subReqArea = Math.max(0, subReqArea - 10);
 
     // Update UI
-     const totalOccupancy = (state.lastCalculatedData?.lifts?.totalOccupancy || 0);
-    const garbageBins = Math.ceil(totalOccupancy / 100);
     setDashVal('dash-allowed-gfa', inputs.allowedGfa);
     setDashVal('dash-consumed-gfa', consumedGfa.toFixed(0));
     setDashVal('dash-balance-gfa', balance.toFixed(0), balance >= 0 ? 'good' : 'bad');
     setDashVal('dash-bua', bua.toFixed(0));
-    setDashVal('dash-efficiency', efficiency + '%');
+    setDashVal('dash-efficiency', f(efficiency, 1) + '%');
     
-    setDashVal('dash-res-gfa', resGfa.toFixed(0));
-    setDashVal('dash-retail-gfa', inputs.retail);
-    setDashVal('dash-office-gfa', inputs.office);
-    setDashVal('dash-nursery-gfa', inputs.nursery);
+    setDashVal('dash-res-gfa', (state.lastCalculatedData?.areas?.achievedResidentialGfa || 0).toFixed(0));
+    setDashVal('dash-retail-gfa', (state.lastCalculatedData?.areas?.achievedRetailGfa || 0).toFixed(0));
+    setDashVal('dash-office-gfa', (state.lastCalculatedData?.areas?.achievedOfficeGfa || 0).toFixed(0));
+    setDashVal('dash-nursery-gfa', inputs.nursery); // This is still an input, might need to be calculated
     
     setDashVal('dash-sellable', sellable.toFixed(0));
     setDashVal('dash-occupancy', totalOccupancy.toFixed(0));
@@ -769,8 +765,28 @@ export function updateDashboard() {
     setDashVal('dash-water-req', waterReq + ' m³/d');
     setDashVal('dash-rmu-area', rmuArea.toFixed(1) + ' m²');
     setDashVal('dash-substation-req', subReqArea.toFixed(0) + ' m²');
-    updateLiveApartmentCalc();
-    
+
+    // --- UNIT COUNT DISPLAY LOGIC ---
+    const container = document.getElementById('dash-wing-details');
+    if (state.lastCalculatedData && state.lastCalculatedData.aptCalcs && state.lastCalculatedData.aptCalcs.wingBreakdown?.length > 0) {
+        // Use data from the last full calculation (matches the report)
+        const aptCalcs = state.lastCalculatedData.aptCalcs;
+        let html = '<div class="dash-row header">Calculated Units (per Floor)</div>';
+        let totalUnits = 0;
+
+        aptCalcs.wingBreakdown.forEach(wing => {
+            totalUnits += wing.totalUnitsPerFloor;
+            html += `<div class="wing-row"><span>Wing ${wing.wingIndex}:</span> <b>${f(wing.totalUnitsPerFloor, 1)} units</b></div>`;
+        });
+
+        if (aptCalcs.wingBreakdown.length > 1) {
+            html += `<div class="wing-total"><span>Total Units:</span> <b>${f(totalUnits, 1)} units</b></div>`;
+        }
+        container.innerHTML = html;
+    } else {
+        // Fallback to live estimation if no report data is available
+        updateLiveApartmentCalc();
+    }
 }
 
 export function setDashVal(id, val, cls) {
