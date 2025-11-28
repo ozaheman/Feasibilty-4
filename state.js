@@ -1,6 +1,6 @@
-
 import { PROJECT_PROGRAMS } from './config.js';
 import { RESIDENTIAL_PROGRAM } from './residentialProgram.js';
+import { VILLA_PROGRAM } from './villaProgram.js';
 import { LEVEL_DEFINITIONS, PREDEFINED_COMPOSITE_BLOCKS } from './config.js';
 
 export function rehydrateProgram(plainProgram, masterProgram) {
@@ -42,7 +42,10 @@ const _state = {
     isFootprint: false,
     dxfOverlayGroup: null,
     scaleLine: null,
-    scaleStart: null
+    scaleStart: null,
+    // New state properties for zip functionality
+    originalPlanFile: null,
+    originalDxfContent: null
 };
 
 export const state = _state;
@@ -89,6 +92,8 @@ export function resetState(keepObjects = false) {
         selectedPlotEdges: [],
         edgeHighlightGroup: null,
         dxfOverlayGroup: null,
+        originalPlanFile: null,
+        originalDxfContent: null,
     });
     if (!keepObjects) {
         if(_state.canvas) {

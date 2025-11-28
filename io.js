@@ -1,8 +1,8 @@
 // MODULE 11: IO (io.js equivalent)
 // =====================================================================
-import { state, resetState, setScale } from './state.js';
+import { state, resetState, setScale,rehydrateProgram  } from './state.js';
 import { handleFinishPolygon } from './eventHandlers.js';
-import { zoomToObject } from './canvasController.js';
+import { zoomToObject, setCanvasBackground, renderPdfToBackground } from './canvasController.js';
 import { updateUI } from './uiController.js';
 import { PROJECT_PROGRAMS } from './config.js';
 
@@ -26,53 +26,59 @@ function formatXML(xml) {
     });
     return formatted.substring(1, formatted.length - 3);
 }
+
+function parseAndDisplayDxf(dxfText) {
+    try {
+        const parser = new DxfParser();
+        const dxf = parser.parseSync(dxfText);
+        if (!dxf || !dxf.entities || dxf.entities.length === 0) { throw new Error("No entities found in DXF file."); }
+        if (state.dxfOverlayGroup) state.canvas.remove(state.dxfOverlayGroup);
+
+        const fabricObjects = [];
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+        dxf.entities.forEach(entity => {
+            if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
+                if (!entity.vertices || entity.vertices.length < 2) return;
+                const points = entity.vertices.map(v => ({ x: v.x, y: -v.y })); // Invert Y
+                const poly = new fabric.Polyline(points, {
+                    fill: 'transparent', stroke: 'rgba(0, 255, 255, 0.8)', strokeWidth: 1, objectCaching: false, strokeUniform: true,
+                });
+                fabricObjects.push(poly);
+                points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
+            }
+        });
+
+        if (fabricObjects.length === 0) { 
+            document.getElementById('status-bar').textContent = "No usable polylines found in the DXF file.";
+            return;
+        }
+
+        const group = new fabric.Group(fabricObjects, { left: 0, top: 0, originX: 'left', originY: 'top', isDxfOverlay: true, });
+        
+        group.forEachObject(obj => { obj.left -= minX; obj.top -= minY; });
+        group.set({ left: minX, top: minY }).setCoords();
+
+        state.dxfOverlayGroup = group;
+        state.canvas.add(group);
+        zoomToObject(group);
+        state.canvas.setActiveObject(group).renderAll();
+        updateUI();
+        document.getElementById('status-bar').textContent = 'DXF imported. Scale and position it over your plan.';
+        
+    } catch (err) {
+        console.error('Error parsing DXF file:', err);
+        document.getElementById('status-bar').textContent = 'Could not parse the DXF file. Please ensure it is a valid DXF format.';
+    }
+}
+
 export function handleDxfUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-        try {
-            const parser = new DxfParser();
-            const dxf = parser.parseSync(event.target.result);
-            if (!dxf || !dxf.entities || dxf.entities.length === 0) { throw new Error("No entities found in DXF file."); }
-            if (state.dxfOverlayGroup) state.canvas.remove(state.dxfOverlayGroup);
-
-            const fabricObjects = [];
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-            dxf.entities.forEach(entity => {
-                if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
-                    if (!entity.vertices || entity.vertices.length < 2) return;
-                    const points = entity.vertices.map(v => ({ x: v.x, y: -v.y })); // Invert Y
-                    const poly = new fabric.Polyline(points, {
-                        fill: 'transparent', stroke: 'rgba(0, 255, 255, 0.8)', strokeWidth: 1, objectCaching: false, strokeUniform: true,
-                    });
-                    fabricObjects.push(poly);
-                    points.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
-                }
-            });
-
-            if (fabricObjects.length === 0) { 
-                document.getElementById('status-bar').textContent = "No usable polylines found in the DXF file.";
-                return;
-            }
-
-            const group = new fabric.Group(fabricObjects, { left: 0, top: 0, originX: 'left', originY: 'top', isDxfOverlay: true, });
-            
-            group.forEachObject(obj => { obj.left -= minX; obj.top -= minY; });
-            group.set({ left: minX, top: minY }).setCoords();
-
-            state.dxfOverlayGroup = group;
-            state.canvas.add(group);
-            zoomToObject(group);
-            state.canvas.setActiveObject(group).renderAll();
-            updateUI();
-            document.getElementById('status-bar').textContent = 'DXF imported. Scale and position it over your plan.';
-            
-        } catch (err) {
-            console.error('Error parsing DXF file:', err);
-            document.getElementById('status-bar').textContent = 'Could not parse the DXF file. Please ensure it is a valid DXF format.';
-        }
+        state.originalDxfContent = event.target.result; // Store raw text
+        parseAndDisplayDxf(state.originalDxfContent);
     };
     reader.readAsText(file);
 }
@@ -82,6 +88,16 @@ export function updateDxfStrokeWidth() {
     state.dxfOverlayGroup.forEachObject(obj => { obj.set('strokeWidth', newWidth); });
     state.canvas.renderAll();
 }
+
+function calculatePolygonArea(points) {
+    if (!points || points.length < 3) return 0;
+    let area = 0;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        area += (points[j].x + points[i].x) * (points[j].y - points[i].y);
+    }
+    return Math.abs(area / 2);
+}
+
 export function assignDxfAsPlot() {
     const selected = state.canvas.getActiveObject();
     if (!selected || !selected.isDxfOverlay) { 
@@ -99,7 +115,7 @@ export function assignDxfAsPlot() {
     polylines.forEach(poly => {
         const matrix = selected.calcTransformMatrix();
         const transformedPoints = poly.points.map(p => fabric.util.transformPoint({ x: p.x + poly.left, y: p.y + poly.top }, matrix));
-        const area = fabric.util.polygonArea(transformedPoints);
+        const area = calculatePolygonArea(transformedPoints);
         if (area > maxArea) { maxArea = area; largestPoly = transformedPoints; }
     });
 
@@ -127,11 +143,15 @@ export function deleteDxf() {
     if (state.dxfOverlayGroup) {
         state.canvas.remove(state.dxfOverlayGroup);
         state.dxfOverlayGroup = null;
+        state.originalDxfContent = null;
         updateUI();
         state.canvas.renderAll();
     }
 }
-export function exportProjectXML(canvas) {
+export function exportProjectZIP(canvas) {
+    const zip = new JSZip();
+
+    // 1. Generate and add XML
     const doc = document.implementation.createDocument(null, "FeasibilityProject", null);
     const projectNode = doc.documentElement;
     const scaleNode = doc.createElement("Scale");
@@ -166,68 +186,118 @@ export function exportProjectXML(canvas) {
     });
     projectNode.appendChild(canvasNode);
     const serializer = new XMLSerializer();
-    const xmlString = serializer.serializeToString(doc);
-    const formattedXml = formatXML(xmlString);
-    downloadFile('project.xml', formattedXml, 'application/xml');
+    const xmlString = formatXML(serializer.serializeToString(doc));
+    zip.file("project.xml", xmlString);
+
+    // 2. Add Original Plan File
+    if (state.originalPlanFile) {
+        zip.file(state.originalPlanFile.name, state.originalPlanFile);
+    }
+
+    // 3. Add Original DXF Content
+    if (state.originalDxfContent) {
+        zip.file("overlay.dxf", state.originalDxfContent);
+    }
+
+    // 4. Generate and Download ZIP
+    zip.generateAsync({ type: "blob" })
+        .then(function(content) {
+            downloadFile("project.zip", content, "application/zip");
+        });
 }
-export function importProjectXML(file, canvas, onComplete) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(e.target.result, "application/xml");
-            if (xmlDoc.getElementsByTagName("parsererror").length) { throw new Error("XML parsing error."); }
-            
-            canvas.clear();
-            
-            const scaleNode = xmlDoc.querySelector("Scale");
-            if (scaleNode) {
-                const pixels = parseFloat(scaleNode.getAttribute("pixels"));
-                const meters = parseFloat(scaleNode.getAttribute("meters"));
-                if (pixels > 0 && meters > 0) { setScale(pixels, meters); }
-            }
-            const plotPropsNode = xmlDoc.querySelector("PlotEdgeProperties");
-            if (plotPropsNode && plotPropsNode.textContent) { state.plotEdgeProperties = JSON.parse(plotPropsNode.textContent); }
-            
-            let projectType = 'Residential';
-            const paramsNode = xmlDoc.querySelector("Parameters");
-            if (paramsNode) {
-                projectType = paramsNode.getAttribute("projectType") || 'Residential';
-                document.getElementById('project-type-select').value = projectType;
-                paramsNode.childNodes.forEach(paramNode => {
-                    if (paramNode.nodeType === 1) {
-                        const input = document.getElementById(paramNode.tagName);
-                        if (input) {
-                            if (input.type === 'checkbox') { input.checked = paramNode.textContent === 'true'; } 
-                            else { input.value = paramNode.textContent; }
-                        }
-                    }
-                });
-            }
-            state.projectType = projectType;
-            const programNode = xmlDoc.querySelector("ProgramData");
-            if(programNode && programNode.textContent) {
-                const plainProgramData = JSON.parse(programNode.textContent);
-                const masterProgram = PROJECT_PROGRAMS[projectType];
-                state.currentProgram = rehydrateProgram(plainProgramData, masterProgram);
-            }
-            const customBlocksNode = xmlDoc.querySelector("UserCompositeBlocks");
-            if(customBlocksNode && customBlocksNode.textContent){ state.userCompositeBlocks = JSON.parse(customBlocksNode.textContent); }
 
-            const objectNodes = xmlDoc.querySelectorAll("CanvasObjects > Object");
-            const fabricObjects = [];
-            objectNodes.forEach(node => fabricObjects.push(JSON.parse(node.textContent)));
-            
-            fabric.util.enlivenObjects(fabricObjects, (enlivenedObjects) => {
-                enlivenedObjects.forEach(obj => canvas.add(obj));
-                canvas.renderAll();
-                if (onComplete) onComplete();
-            });
-
-        } catch (error) {
-            console.error("Failed to import XML:", error);
-            document.getElementById('status-bar').textContent = "Error: Could not parse the project file. It may be corrupt or in an old format.";
+export function importProjectZIP(file, canvas, onComplete) {
+    JSZip.loadAsync(file).then(async (zip) => {
+        const xmlFile = zip.file("project.xml");
+        if (!xmlFile) {
+            throw new Error("project.xml not found in the zip archive.");
         }
-    };
-    reader.readAsText(file);
+        
+        const xmlContent = await xmlFile.async("string");
+        
+        // --- PARSE XML FIRST ---
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
+        if (xmlDoc.getElementsByTagName("parsererror").length) { throw new Error("XML parsing error."); }
+        
+        canvas.clear();
+        
+        const scaleNode = xmlDoc.querySelector("Scale");
+        if (scaleNode) {
+            const pixels = parseFloat(scaleNode.getAttribute("pixels"));
+            const meters = parseFloat(scaleNode.getAttribute("meters"));
+            if (pixels > 0 && meters > 0) { setScale(pixels, meters); }
+        }
+        const plotPropsNode = xmlDoc.querySelector("PlotEdgeProperties");
+        if (plotPropsNode && plotPropsNode.textContent) { state.plotEdgeProperties = JSON.parse(plotPropsNode.textContent); }
+        
+        let projectType = 'Residential';
+        const paramsNode = xmlDoc.querySelector("Parameters");
+        if (paramsNode) {
+            projectType = paramsNode.getAttribute("projectType") || 'Residential';
+            document.getElementById('project-type-select').value = projectType;
+            paramsNode.childNodes.forEach(paramNode => {
+                if (paramNode.nodeType === 1) {
+                    const input = document.getElementById(paramNode.tagName);
+                    if (input) {
+                        if (input.type === 'checkbox') { input.checked = paramNode.textContent === 'true'; } 
+                        else { input.value = paramNode.textContent; }
+                    }
+                }
+            });
+        }
+        state.projectType = projectType;
+        const programNode = xmlDoc.querySelector("ProgramData");
+        if(programNode && programNode.textContent) {
+            const plainProgramData = JSON.parse(programNode.textContent);
+            const masterProgram = PROJECT_PROGRAMS[projectType];
+            state.currentProgram = rehydrateProgram(plainProgramData, masterProgram);
+        }
+        const customBlocksNode = xmlDoc.querySelector("UserCompositeBlocks");
+        if(customBlocksNode && customBlocksNode.textContent){ state.userCompositeBlocks = JSON.parse(customBlocksNode.textContent); }
+
+        const objectNodes = xmlDoc.querySelectorAll("CanvasObjects > Object");
+        const fabricObjects = [];
+        objectNodes.forEach(node => fabricObjects.push(JSON.parse(node.textContent)));
+        
+        // --- LOAD CANVAS OBJECTS ---
+        fabric.util.enlivenObjects(fabricObjects, async (enlivenedObjects) => {
+            enlivenedObjects.forEach(obj => canvas.add(obj));
+            canvas.renderAll();
+
+            // --- NOW LOAD BACKGROUND AND DXF ASSETS ---
+            // Find plan file (pdf, png, jpg, etc.)
+            const planFileRegex = /\.(pdf|png|jpe?g)$/i;
+            const planZipObject = Object.values(zip.files).find(f => !f.dir && planFileRegex.test(f.name));
+
+            if (planZipObject) {
+                state.originalPlanFile = await planZipObject.async("blob");
+                // Manually add name property for compatibility
+                state.originalPlanFile.name = planZipObject.name; 
+
+                if (planZipObject.name.toLowerCase().endsWith('.pdf')) {
+                    const arrayBuffer = await planZipObject.async("arraybuffer");
+                    window.currentPdfData = arrayBuffer;
+                    await renderPdfToBackground(arrayBuffer, 1);
+                } else {
+                    const dataUrl = URL.createObjectURL(state.originalPlanFile);
+                    setCanvasBackground(dataUrl);
+                }
+            }
+
+            // Find DXF file
+            const dxfZipObject = zip.file("overlay.dxf");
+            if (dxfZipObject) {
+                const dxfText = await dxfZipObject.async("string");
+                state.originalDxfContent = dxfText;
+                parseAndDisplayDxf(dxfText);
+            }
+
+            if (onComplete) onComplete();
+        });
+
+    }).catch((error) => {
+        console.error("Failed to import ZIP:", error);
+        document.getElementById('status-bar').textContent = "Error: Could not parse the project file. It may be corrupt or not a valid project zip.";
+    });
 }

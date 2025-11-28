@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://unpkg.com/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
 </script>
@@ -24,9 +24,9 @@
     <div class="control-group">
         <h3>1. Project I/O</h3>
         <div class="button-grid">
-            <label for="xml-upload" class="button warning" style="text-align:center; padding: 12px 0; margin-top:0; cursor:pointer;">Import XML</label>
-            <input type="file" id="xml-upload" accept=".xml" style="display:none;">
-            <button id="export-xml-btn">Export XML</button>
+            <label for="zip-upload" class="button warning" style="text-align:center; padding: 12px 0; margin-top:0; cursor:pointer;">Import Project (.zip)</label>
+            <input type="file" id="zip-upload" accept=".zip" style="display:none;">
+            <button id="export-zip-btn">Export Project (.zip)</button>
         </div>
     </div>
     <div class="control-group">
@@ -121,6 +121,7 @@
             <select id="project-type-select">
                 <option value="Residential">Residential Building</option>
                 <option value="Hotel">Hotel</option>
+                <option value="Villa">Villa</option>
                 <option value="LabourCamp">Labour Camp</option>
                 <option value="School">School</option>
                 <option value="Warehouse">Warehouse</option>
@@ -148,11 +149,11 @@
         <div class="input-grid" style="margin-top:10px;">
             <div><label for="allowedGfa">Allowed Total GFA (m²)</label><input type="number" class="param-input" id="allowedGfa" value="13427"></div>
             <div><label for="numBasements">Basements</label><input type="number" class="param-input" id="numBasements" value="1" min="0"></div>
-            <div><label for="allowedRetailGfa">Allowed Retail GFA (m²)</label><input type="number" class="param-input" id="allowedRetailGfa" value="1000"></div>
+            <div><label for="allowedRetailGfa">Allowed Retail GFA (m²)</label><input type="number" class="param-input" id="allowedRetailGfa" value="0"></div>
             <div><label for="numPodiums">Podiums</label><input type="number" class="param-input" id="numPodiums" value="3" min="0"></div>
-            <div><label for="allowedOfficeGfa">Allowed Office GFA (m²)</label><input type="number" class="param-input" id="allowedOfficeGfa" value="2000"></div>
+            <div><label for="allowedOfficeGfa">Allowed Office GFA (m²)</label><input type="number" class="param-input" id="allowedOfficeGfa" value="0"></div>
             
-            <div><label for="allowedNurseryGfa">Allowed Nursary GFA (m²)</label><input type="number" class="param-input" id="allowedNurseryGfa" value="2000"></div>
+            <div><label for="allowedNurseryGfa">Allowed Nursary GFA (m²)</label><input type="number" class="param-input" id="allowedNurseryGfa" value="0"></div>
             <div><label for="numTypicalFloors">Typical Floors</label><input type="number" class="param-input" id="numTypicalFloors" value="11" min="0"></div>
              <div><label for="numHotelFloors">Hotel Floors</label><input type="number" class="param-input" id="numHotelFloors" value="0" min="0"></div>
         </div>

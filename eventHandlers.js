@@ -10,7 +10,7 @@ import { exportReportAsPDF,generateReport  } from './reportGenerator.js';
 import { PROJECT_PROGRAMS, AREA_STATEMENT_DATA ,PREDEFINED_BLOCKS , BLOCK_CATEGORY_COLORS } from './config.js';
 import { allocateCountsByPercent, getPolygonProperties, getOffsetPolygon } from './utils.js';
 import { layoutFlatsOnPolygon } from './apartmentLayout.js';
-import { handleDxfUpload, assignDxfAsPlot,finalizeDxf,deleteDxf,updateDxfStrokeWidth, exportProjectXML, importProjectXML  } from './io.js';
+import { handleDxfUpload, assignDxfAsPlot,finalizeDxf,deleteDxf,updateDxfStrokeWidth, exportProjectZIP, importProjectZIP  } from './io.js';
 
 export function setupEventListeners() {
      if (!state.canvas) {
@@ -37,8 +37,8 @@ export function setupEventListeners() {
     document.getElementById('floating-header').addEventListener('click', toggleFloatingPanel);
     document.querySelectorAll('.param-input').forEach(inp => inp.addEventListener('input', updateDashboard));
     document.getElementById('toggle-lock-btn').addEventListener('click', toggleBlockLock);
-    document.getElementById('xml-upload').addEventListener('change', handleImportXML);
-    document.getElementById('export-xml-btn').addEventListener('click', () => exportProjectXML(state.canvas));
+    document.getElementById('zip-upload').addEventListener('change', handleImportZIP);
+    document.getElementById('export-zip-btn').addEventListener('click', () => exportProjectZIP(state.canvas));
     document.getElementById('dxf-upload').addEventListener('change', handleDxfUpload);
     document.getElementById('assign-dxf-plot-btn').addEventListener('click', assignDxfAsPlot);
     document.getElementById('zoom-to-dxf-btn').addEventListener('click', () => zoomToObject(state.dxfOverlayGroup));
@@ -278,11 +278,12 @@ export function updateBlockDimension(dimension) {
     handleObjectModified({target: selected});
 }
 
-export function handleImportXML(e) {
+function handleImportZIP(e) {
     const file = e.target.files[0];
     if (!file) return;
-    importProjectXML(file, state.canvas, () => {
-        resetState (true);
+    importProjectZIP(file, state.canvas, () => {
+        // This callback runs after all assets are loaded from the zip
+        resetState (true); // true = keep objects that were just loaded
         state.canvas.getObjects().forEach(obj => {
             if (obj.isPlot) state.plotPolygon = obj;
             else if (obj.isFootprint && obj.level && state.levels[obj.level]) state.levels[obj.level].objects.push(obj);
@@ -300,10 +301,11 @@ export function handleImportXML(e) {
     });
 }
 export async function handlePlanUpload(e) {
-    
     const file = e.target.files[0];
     if (!file) return;
-    resetState ();
+
+    state.originalPlanFile = file; // Store the original file object
+    resetState();
   
     const reader = new FileReader();
     if (file.type.includes('pdf')) {
