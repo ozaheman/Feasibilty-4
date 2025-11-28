@@ -45,7 +45,8 @@ export function  performCalculations() {
                 totalArea += area;
                 details.push({
                     name: b.blockData.name,
-                    area: area
+                    area: area,
+                    level: b.level
                 });
             });
         return { totalArea, details };
@@ -111,7 +112,7 @@ export function  performCalculations() {
 
                 const layoutResult = layoutFlatsOnPolygon(footprint, bestFit.counts, includeBalconiesInOffset, calcMode, doubleLoaded);
                 if (layoutResult.corridorArea > 0) {
-                    corridorTotalArea += layoutResult.corridorArea * inputs.numTypicalFloors;
+                    corridorTotalArea += layoutResult.corridorArea; // Per floor
                 }
             });
 
@@ -135,51 +136,28 @@ export function  performCalculations() {
         aptCalcs.aptMixWithCounts = aptMixWithCounts;
         aptCalcs.wingBreakdown = wingCalcs;
     }
-
-    let commonAreaDetails = [];
-    const addDetails = (levelName, levelKey) => {
-        getBlockDetails('gfa', levelKey).details.forEach(d => {
-            commonAreaDetails.push({ ...d, level: levelName, name: d.name.replace(`(${levelName})`, '').trim() });
-        });
-        const slabArea = getAreaForLevel(levelKey);
-        if (slabArea > 0) {
-             commonAreaDetails.push({ name: `${levelName} Floor Area`, area: slabArea, level: levelName });
-        }
-    };
     
-    addDetails('Ground Floor', 'Ground_Floor');
-    const podiumCommonDetails = getBlockDetails('gfa', 'Podium');
-    if (podiumCommonDetails.totalArea > 0 && inputs.numPodiums > 0) {
-         commonAreaDetails.push({name: `Podium Common Blocks`, area: podiumCommonDetails.totalArea * inputs.numPodiums, level: `Podium (x${inputs.numPodiums})`});
-    }
-    const typicalCommonDetails = getBlockDetails('gfa', 'Typical_Floor');
-    if (typicalCommonDetails.totalArea > 0 && inputs.numTypicalFloors > 0) {
-         commonAreaDetails.push({name: `Typical Common Blocks`, area: typicalCommonDetails.totalArea * inputs.numTypicalFloors, level: `Typical (x${inputs.numTypicalFloors})`});
-    }
+    const allGfaBlocks = getBlockDetails('gfa');
+    const totalCommonFromBlocks = allGfaBlocks.totalArea;
+
+    let commonAreaDetails = allGfaBlocks.details.map(d => ({...d, name: d.name.replace(`(${d.level})`, '').trim()}));
+
     if (corridorTotalArea > 0) {
-        commonAreaDetails.push({name: `Apartment Corridors`, area: corridorTotalArea, level: `Typical (x${inputs.numTypicalFloors})`});
+        commonAreaDetails.push({name: `Apartment Corridors (per floor)`, area: corridorTotalArea, level: `Typical_Floor`});
     }
-    addDetails('Roof', 'Roof');
-    
-    state.levels.Basement.objects.filter(o => o.isFootprint).forEach((poly, idx) => {
-        const area = getPolygonProperties(poly).area;
-        commonAreaDetails.push({ name: `Basement Area ${idx+1}`, area: area, level: 'Basement' });
-    });
 
-    const totalCommon = commonAreaDetails.reduce((sum, item) => sum + item.area, 0);
+    const totalCommon = totalCommonFromBlocks + (corridorTotalArea * inputs.numTypicalFloors);
     
     const areas = {
         achievedResidentialGfa: aptCalcs.totalSellableArea, achievedRetailGfa, achievedOfficeGfa, achievedHotelGfa,
-        totalCommon, podiumCarPark: calculateNetParkingArea('Podium') * inputs.numPodiums,
-        gfCarPark: calculateNetParkingArea('Ground_Floor'), basementCarPark: calculateNetParkingArea('Basement') * inputs.numBasements,
-        podiumServices: getBlockDetails('service', 'Podium').totalArea * inputs.numPodiums,
-        gfServices: getBlockDetails('service', 'Ground_Floor').totalArea,
-        basementServices: getBlockDetails('service', 'Basement').totalArea * inputs.numBasements,
-        coreServices: getBlockDetails('service', 'Typical_Floor').totalArea * inputs.numTypicalFloors,
-        roofTerrace: getAreaForLevel('Roof'), roofServices: getBlockDetails('service', 'Roof').totalArea
+        totalCommon,
+        podiumCarPark: calculateNetParkingArea('Podium') * inputs.numPodiums,
+        gfCarPark: calculateNetParkingArea('Ground_Floor'),
+        basementCarPark: calculateNetParkingArea('Basement') * inputs.numBasements,
+        roofTerrace: getBlockDetails('builtup', 'Roof').totalArea
     };
     
-    const totalGfa = areas.achievedResidentialGfa + areas.achievedRetailGfa + areas.achievedOfficeGfa + areas.achievedHotelGfa + areas.totalCommon;
+    const totalGfa = areas.achievedResidentialGfa + areas.achievedRetailGfa + areas.achievedOfficeGfa + areas.achievedHotelGfa + totalCommon;
     
     let totalSellable = aptCalcs.totalSellableArea;
     if (inputs['include-retail-sellable']) totalSellable += areas.achievedRetailGfa;
@@ -187,9 +165,44 @@ export function  performCalculations() {
     if (inputs['include-hotel-sellable']) totalSellable += areas.achievedHotelGfa;
     if (inputs['include-balcony-sellable']) totalSellable += aptCalcs.totalBalconyArea;
 
-    const additionalBuiltup = areas.podiumCarPark + areas.gfCarPark + areas.basementCarPark + areas.podiumServices + areas.gfServices + areas.basementServices + areas.coreServices + aptCalcs.totalBalconyArea + areas.roofTerrace + areas.roofServices;
-                              
-    const totalBuiltup = totalGfa + additionalBuiltup;
+    const levelBreakdown = {};
+    let calculatedTotalBua = 0;
+
+    LEVEL_ORDER.forEach(levelKey => {
+        const levelDef = LEVEL_DEFINITIONS[levelKey];
+        const multiplier = levelDef.countKey ? (inputs[levelDef.countKey] || 0) : 1;
+        if (state.levels[levelKey].objects.length > 0 || getBlockDetails('gfa', levelKey).totalArea > 0 || getBlockDetails('service', levelKey).totalArea > 0) {
+            
+            const item = {
+                multiplier: multiplier,
+                sellableGfa: 0,
+                commonGfa: getAreaOfBlocksByCategory('gfa', levelKey),
+                service: getAreaOfBlocksByCategory('service', levelKey),
+                parking: calculateNetParkingArea(levelKey),
+                balconyTerrace: 0,
+                total: 0
+            };
+
+            if (levelKey === 'Typical_Floor') {
+                item.sellableGfa = aptCalcs.totalSellableArea / (multiplier || 1);
+                item.commonGfa += corridorTotalArea;
+                item.balconyTerrace = aptCalcs.totalBalconyArea / (multiplier || 1);
+            } else if (levelKey === 'Hotel') {
+                item.sellableGfa = achievedHotelGfa / (multiplier || 1);
+            } else if (['Retail', 'Supermarket'].includes(levelKey)) {
+                item.sellableGfa = getAreaForLevel(levelKey);
+            } else if (['Office', 'Commercial'].includes(levelKey)) {
+                item.sellableGfa = getAreaForLevel(levelKey);
+            } else if (levelKey === 'Roof') {
+                item.balconyTerrace = getAreaOfBlocksByCategory('builtup', levelKey);
+            }
+            
+            item.total = (item.sellableGfa + item.commonGfa + item.service + item.parking + item.balconyTerrace) * multiplier;
+            levelBreakdown[levelKey] = item;
+            calculatedTotalBua += item.total;
+        }
+    });
+
     const efficiency = (totalGfa > 0 ? (totalSellable / totalGfa * 100) : 0);
 
     const parkingBreakdown = [];
@@ -262,22 +275,9 @@ export function  performCalculations() {
     const liftsRequired = RESIDENTIAL_PROGRAM.calculateLifts(totalOccupancy, totalFloorsAboveGround);
     const liftsProvided = countBlocks('Lift'); 
     
-    const levelBreakdown = {};
-    LEVEL_ORDER.forEach(levelKey => {
-        const levelDef = LEVEL_DEFINITIONS[levelKey];
-        const multiplier = levelDef.countKey ? (inputs[levelDef.countKey] || (levelKey.includes('Last') ? 0 : 1)) : 1;
-        if(multiplier > 0) {
-            levelBreakdown[levelKey] = {
-                gfa: getAreaOfBlocksByCategory('gfa', levelKey, multiplier),
-                service: getAreaOfBlocksByCategory('service', levelKey, multiplier),
-                builtup: getAreaOfBlocksByCategory('builtup', levelKey, multiplier),
-            };
-        }
-    });
-
     return {
         inputs, areas, aptCalcs, hotelCalcs,
-        summary: { totalGfa, totalBuiltup, totalSellable, efficiency, commonAreaDetails },
+        summary: { totalGfa, totalBuiltup: calculatedTotalBua, totalSellable, efficiency, commonAreaDetails },
         parking: { breakdown: parkingBreakdown, required: totalParkingReq, provided: parkingProvided, surplus: parkingProvided - totalParkingReq },
         lifts: { required: liftsRequired, provided: liftsProvided, surplus: liftsProvided - liftsRequired, totalOccupancy: totalOccupancy },
         services: { garbageBinsRequired: garbageBinsRequired },

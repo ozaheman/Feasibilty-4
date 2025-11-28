@@ -245,7 +245,7 @@ export function renderServiceBlockList() {
             blocksByLevelAndCat[level][category].forEach(block => {
                 const areaM2 = (block.getScaledWidth() * block.getScaledHeight()) * (state.scale.ratio * state.scale.ratio);
                 categoryTotalArea += areaM2;
-                html += `<li title="${block.blockId}: ${block.blockData.name}">${block.blockId}: ${areaM2.toFixed(1)} m²</li>`;
+                html += `<li title="${block.blockId}: ${block.blockData.name}">${block.blockId}: ${block.blockData.name} ${areaM2.toFixed(1)} m²</li>`;
             });
             html += `</ul>`;
             html += `<div style="text-align:right; font-weight:bold; font-size:0.9em; border-top: 1px dotted #ccc; padding: 2px 4px;">Total ${category}: ${categoryTotalArea.toFixed(1)} m²</div>`;

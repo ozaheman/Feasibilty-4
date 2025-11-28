@@ -121,49 +121,64 @@ export function  generateSummaryReportHTML(data) {
 
 export function  generateDetailedReportHTML(data) {
     if (!data) return '<p>Calculation failed. Please check inputs and drawings.</p>';
-    const { inputs, levelBreakdown, aptCalcs, areas } = data;
+    const { inputs, levelBreakdown, summary } = data;
 
-    let totalGfaBlocks = 0;
-    let totalServiceBlocks = 0;
-
-    const levelRows = LEVEL_ORDER.map(levelKey => {
+    const totals = { sellableGfa: 0, commonGfa: 0, service: 0, parking: 0, balconyTerrace: 0, total: 0 };
+    
+    let levelRows = '';
+    LEVEL_ORDER.forEach(levelKey => {
         const breakdown = levelBreakdown[levelKey];
-        if (!breakdown) return '';
+        if (!breakdown) return;
+
+        const levelName = `${levelKey.replace(/_/g, ' ')} ${breakdown.multiplier > 1 ? `(x${breakdown.multiplier})` : ''}`;
         
-        totalGfaBlocks += breakdown.gfa;
-        totalServiceBlocks += breakdown.service;
+        totals.sellableGfa += breakdown.sellableGfa * breakdown.multiplier;
+        totals.commonGfa += breakdown.commonGfa * breakdown.multiplier;
+        totals.service += breakdown.service * breakdown.multiplier;
+        totals.parking += breakdown.parking * breakdown.multiplier;
+        totals.balconyTerrace += breakdown.balconyTerrace * breakdown.multiplier;
+        totals.total += breakdown.total;
 
-        return `<tr>
-            <td>${levelKey.replace(/_/g, ' ')}</td>
-            <td>${f(breakdown.gfa)}</td>
-            <td>${f(breakdown.service)}</td>
+        levelRows += `<tr>
+            <td><strong>${levelName}</strong></td>
+            <td>${f(breakdown.sellableGfa * breakdown.multiplier)}</td>
+            <td>${f(breakdown.commonGfa * breakdown.multiplier)}</td>
+            <td>${f(breakdown.service * breakdown.multiplier)}</td>
+            <td>${f(breakdown.parking * breakdown.multiplier)}</td>
+            <td>${f(breakdown.balconyTerrace * breakdown.multiplier)}</td>
+            <td class="sub-total-row">${f(breakdown.total)}</td>
         </tr>`;
-    }).join('');
+    });
 
-    const totalCalculatedGfa = areas.achievedResidentialGfa + areas.achievedRetailGfa + areas.achievedOfficeGfa + areas.achievedHotelGfa + totalGfaBlocks;
-    const totalBuiltUp = totalCalculatedGfa + areas.podiumCarPark + areas.gfCarPark + areas.basementCarPark + totalServiceBlocks + aptCalcs.totalBalconyArea + areas.roofTerrace;
-
-    return `<h2>Feasibility Detailed Report (${state.projectType})</h2>
-    <table class="report-table">
-        <tr class="grand-total-row"><td colspan="2">Allowed GFA</td><td colspan="2">${f(inputs.allowedGfa)} m²</td></tr>
-        <tr class="section-header"><th>Level</th><th>GFA Blocks Area (m²)</th><th>Service Blocks Area (m²)</th></tr>
+    return `<h2>Feasibility Detailed Report</h2>
+    <table class="report-table" style="font-size: 0.8em;">
+        <tr class="section-header">
+            <th>Level</th>
+            <th>Sellable GFA (m²)</th>
+            <th>Common GFA (m²)</th>
+            <th>Service Area (m²)</th>
+            <th>Parking Area (m²)</th>
+            <th>Balcony/Terrace (m²)</th>
+            <th>Total BUA on Level (m²)</th>
+        </tr>
         ${levelRows}
-        <tr class="sub-total-row"><td><strong>Sub-Total Blocks</strong></td><td><strong>${f(totalGfaBlocks)}</strong></td><td><strong>${f(totalServiceBlocks)}</strong></td></tr>
-        <tr><td>Total Residential Sellable Area</td><td>${f(areas.achievedResidentialGfa)}</td><td></td></tr>
-        <tr><td>Total Retail GFA</td><td>${f(areas.achievedRetailGfa)}</td><td></td></tr>
-        <tr><td>Total Office GFA</td><td>${f(areas.achievedOfficeGfa)}</td><td></td></tr>
-        <tr><td>Total Hotel GFA</td><td>${f(areas.achievedHotelGfa)}</td><td></td></tr>
-        <tr class="total-row"><td><strong>Total GFA</strong></td><td colspan="2"><strong>${f(totalCalculatedGfa)} m²</strong></td></tr>
+        <tr class="total-row">
+            <td><strong>Totals</strong></td>
+            <td><strong>${f(totals.sellableGfa)}</strong></td>
+            <td><strong>${f(totals.commonGfa)}</strong></td>
+            <td><strong>${f(totals.service)}</strong></td>
+            <td><strong>${f(totals.parking)}</strong></td>
+            <td><strong>${f(totals.balconyTerrace)}</strong></td>
+            <td><strong>-</strong></td>
+        </tr>
     </table>
     <table class="report-table" style="margin-top: 20px;">
-        <tr class="section-header"><td colspan="2">Built-Up Area (BUA) Calculation</td></tr>
-        <tr><td>Total GFA</td><td>${f(totalCalculatedGfa)} m²</td></tr>
-        <tr><td>Total Service Block Area</td><td>${f(totalServiceBlocks)} m²</td></tr>
-        <tr><td>Total Parking Area</td><td>${f(areas.basementCarPark + areas.gfCarPark + areas.podiumCarPark)} m²</td></tr>
-        <tr><td>Total Balcony Area</td><td>${f(aptCalcs.totalBalconyArea)} m²</td></tr>
-        <tr><td>Roof Terrace Area</td><td>${f(areas.roofTerrace)} m²</td></tr>
-        <tr class="grand-total-row"><td><strong>Total BUA</strong></td><td><strong>${f(totalBuiltUp)} m²</strong></td></tr>
-    </table>`;
+         <tr class="section-header"><td colspan="2">Overall Project Summary</td></tr>
+         <tr><td>Total GFA (Sellable + Common)</td><td>${f(summary.totalGfa)} m²</td></tr>
+         <tr class="grand-total-row"><td><strong>Total Built-Up Area (BUA)</strong></td><td><strong>${f(summary.totalBuiltup)} m²</strong></td></tr>
+         <tr class="total-row"><td>Efficiency (Sellable/GFA)</td><td class="highlight-cell">${f(summary.efficiency, 1)}%</td></tr>
+    </table>
+    `;
 }
 
 async function captureLevelScreenshot(levelName) {
@@ -239,15 +254,18 @@ export async function exportReportAsPDF() {
     }
 
     if (includeScreenshots) {
-        const levelsToCapture = ['Ground_Floor', 'Typical_Floor', 'Podium', 'Basement', 'Roof'];
+        const levelsToCapture = LEVEL_ORDER.filter(level => 
+            state.levels[level].objects.length > 0 || 
+            state.serviceBlocks.some(b => b.level === level)
+        );
         for (const level of levelsToCapture) {
-            if (state.levels[level].objects.length > 0) {
-                doc.addPage();
-                doc.setFontSize(16);
-                doc.text(`${level.replace(/_/g, ' ')} Plan`, 10, 20);
-                const screenshotData = await captureLevelScreenshot(level);
-                doc.addImage(screenshotData, 'PNG', 10, 30, pdfWidth, (pdfWidth / state.canvas.width) * state.canvas.height);
-            }
+            doc.addPage();
+            doc.setFontSize(16);
+            doc.text(`${level.replace(/_/g, ' ')} Plan`, 10, 20);
+            const screenshotData = await captureLevelScreenshot(level);
+            const scProps = doc.getImageProperties(screenshotData);
+            const scHeight = (scProps.height * pdfWidth) / scProps.width;
+            doc.addImage(screenshotData, 'PNG', 10, 30, pdfWidth, scHeight);
         }
     }
 

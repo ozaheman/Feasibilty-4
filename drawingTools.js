@@ -394,6 +394,7 @@ export function handleMouseUp(o) {
         exitAllModes();
     }
     clearEdgeSnapIndicator();
+    updateDashboard();
 }
 export function handleDblClick(o) {
     if ((state.currentMode === 'drawingPlot' || state.currentMode === 'drawingBuilding') && polygonPoints.length > 2) {

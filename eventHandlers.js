@@ -2,7 +2,7 @@
 // =====================================================================
 import { initCanvas, resetZoom,renderPdfToBackground,zoomCanvas ,getCanvas ,clearOverlay ,setCanvasBackground ,getOverlayContext ,redrawApartmentPreview, zoomToObject  } from './canvasController.js';
 import { resetState,setCurrentLevel,state,setCurrentMode,setScale, toggleAllLayersVisibility ,rehydrateProgram  } from './state.js';
-import { initDrawingTools,handleDblClick, getSetbackPolygonPoints,handleCanvasMouseMove,clearSetbackGuides,clearEdgeHighlight,updateAlignmentHighlight,resetDrawingState,handleCanvasMouseDown,clearEdgeSnapIndicator ,finishScaling,drawSetbackGuides,findSnapPoint ,updateSnapIndicators,drawMeasurement, getClickedPlotEdge, getNearestEdge, snapObjectToEdge, alignObjectToEdge           } from './drawingTools.js'; 
+import { initDrawingTools,handleDblClick, getSetbackPolygonPoints,handleCanvasMouseMove,clearSetbackGuides,clearEdgeHighlight,updateAlignmentHighlight,resetDrawingState,handleCanvasMouseDown,clearEdgeSnapIndicator ,finishScaling,drawSetbackGuides,findSnapPoint ,updateSnapIndicators,drawMeasurement, getClickedPlotEdge, getNearestEdge, snapObjectToEdge, alignObjectToEdge , updateEdgeHighlight           } from './drawingTools.js'; 
 import { regenerateParkingInGroup, generateLinearParking   } from './parkingLayoutUtils.js';
 import { init3D,generate3DBuilding , generateOpenScadScript  } from './viewer3d.js';
 import { initUI, updateUI,displayHotelRequirements ,placeSelectedComposite, handleConfirmLevelOp  ,applyLevelVisibility ,updateLevelFootprintInfo ,renderServiceBlockList,updateSelectedObjectControls , openLevelOpModal,updateParkingDisplay,toggleFloatingPanel,updateDashboard,toggleBlockLock, saveUnitChanges, openNewCompositeEditor, editSelectedComposite, deleteSelectedComposite, saveCompositeChanges, addSubBlockToCompositeEditor, applyScenario, toggleApartmentMode, openEditUnitModal,updateLevelCounts, populateServiceBlocksDropdown, updateProgramUI      } from './uiController.js';
@@ -172,7 +172,8 @@ export function placeServiceBlock(pointer) {
             originX: 'center', 
             originY: 'center',
             isServiceBlock: true, 
-            blockData:blockData, 
+            blockData:blockData,
+                       
             blockId: blockId, 
             level: state.currentLevel, 
             selectable: true,
