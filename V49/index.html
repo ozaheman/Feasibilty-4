@@ -1,0 +1,491 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Integrated Site Feasibility Engine</title>
+<!-- Library Imports -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://unpkg.com/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+</script>
+<!-- Local Stylesheet -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="sidebar">
+    <h1>Feasibility Engine</h1>
+    <div class="control-group">
+        <h3>1. Project I/O</h3>
+        <div class="button-grid">
+            <label for="zip-upload" class="button warning" style="text-align:center; padding: 12px 0; margin-top:0; cursor:pointer;">Import Project (.zip)</label>
+            <input type="file" id="zip-upload" accept=".zip" style="display:none;">
+            <button id="export-zip-btn">Export Project (.zip)</button>
+        </div>
+    </div>
+    <div class="control-group">
+        <h3>2. Site Plan & Scale</h3>
+        <div class="button-grid" style="margin-bottom:10px;">
+             <label for="plan-upload" class="button" style="text-align:center; padding: 12px 0; margin-top:0; cursor:pointer;">Upload Plan</label>
+             <input type="file" id="plan-upload" accept=".png, .jpg, .jpeg, .pdf" style="display:none;">
+             <label for="dxf-upload" class="button" style="text-align:center; padding: 12px 0; margin-top:0; cursor:pointer;">Import DXF</label>
+             <input type="file" id="dxf-upload" accept=".dxf" style="display:none;">
+        </div>
+        <div id="pdf-controls" style="display:none;">
+            <label for="pdf-page">PDF Page:</label>
+            <input type="number" id="pdf-page" value="1" min="1">
+        </div>
+        <div id="scale-input-group" style="margin-top:10px;">
+            <label for="scale-distance">Known Distance (m)</label>
+            <input type="number" id="scale-distance" value="10" step="0.1" disabled>
+            <button id="set-scale-btn" disabled>Set Scale</button>
+        </div>
+        <div id="scale-display" style="font-size:0.8em; margin-top:5px;">Scale not set.</div>
+        <div id="dxf-controls" style="display:none; margin-top:10px; border-top: 1px solid #ccc; padding-top: 10px;">
+            <h4>DXF Overlay Controls</h4>
+            <p style="font-size:0.8em; margin: -5px 0 10px 0;">Select the group on canvas. Use corner handles to rotate/scale, or drag to move.</p>
+            <div class="button-grid-3">
+                <button id="assign-dxf-plot-btn">Assign as Plot</button>
+                <button id="zoom-to-dxf-btn">Zoom to DXF</button>
+                <button id="finalize-dxf-btn" class="warning">Finalize Guides</button>
+            </div>
+             <div style="margin-top: 10px;">
+                <label for="dxf-stroke-width">Line Thickness:</label>
+                <input type="number" id="dxf-stroke-width" value="1" min="0.1" step="0.1">
+            </div>
+            <button id="delete-dxf-btn" class="danger" style="margin-top:5px;">Delete DXF Overlay</button>
+        </div>
+    </div>
+
+    <div class="control-group">
+        <h3>3. Level Management</h3>
+        <div class="button-grid-3" id="level-selector">
+             <!-- Buttons will be populated by JS -->
+        </div>
+         <button id="toggle-visibility-btn" class="warning" style="margin-top:10px;">Show All Layers</button>
+    </div>
+
+    <div class="control-group">
+        <h3>4. Drawing Tools</h3>
+        <button id="draw-plot-btn" disabled>Draw Plot Polygon</button>
+        <button id="measure-tool-btn" disabled>Measure Distance</button>
+        <button id="draw-guide-btn" disabled>Draw Guide</button>
+        <button id="edit-setbacks-btn" disabled>Edit Individual Setbacks</button>
+        <div id="individual-setback-controls">
+            <h4>Individual Setback</h4>
+            <label for="individual-setback-dist">Distance (m):</label>
+            <input type="number" id="individual-setback-dist" value="5">
+            <label for="individual-setback-dir">Direction:</label>
+            <select id="individual-setback-dir">
+                <option value="inside">Inside</option>
+                <option value="outside">Outside</option>
+            </select>
+            <button id="apply-individual-setback-btn">Apply to Selected</button>
+            <button id="clear-setback-selection-btn" class="warning">Clear Selection</button>
+        </div>
+        
+        <!-- Updated Footprint Buttons -->
+        <div class="button-grid">
+            <button id="draw-building-btn" disabled>Draw Closed Footprint</button>
+            <button id="draw-linear-btn" disabled>Draw Linear Footprint</button>
+        </div>
+
+        <button id="footprint-from-setbacks-btn" class="active" disabled style="margin-top: 5px;">Create Footprint from Setbacks</button>
+        <button id="footprint-from-plot-btn" class="active" disabled style="margin-top: 5px;">Create Footprint from Plot</button>
+        <div class="button-grid" style="margin-top: 5px;">
+             <button id="edit-footprint-btn" disabled class="warning">Edit Footprint</button>
+             <button id="delete-footprint-btn" disabled class="danger">Delete Footprint</button>
+        </div>
+        <button id="confirm-footprint-btn" style="display:none; margin-top: 5px;" class="active">✓ Confirm Edit</button>
+        <h4 style="margin-top:15px; margin-bottom:5px;">Snap Settings</h4>
+        <div id="snap-settings">
+            <label><input type="checkbox" class="snap-toggle" id="snap-endpoint" checked> Endpoint</label>
+            <label><input type="checkbox" class="snap-toggle" id="snap-auto-align" checked> Auto Align</label>
+            <label><input type="checkbox" class="snap-toggle" id="snap-perpendicular" checked> Perpendicular</label>
+            <label><input type="checkbox" class="snap-toggle" id="snap-parallel" checked> Parallel</label>
+        </div>
+        <div style="font-size: 0.9em; margin-top: 5px;">
+            <label><input type="checkbox" id="auto-close-preview-check"> Auto-close Polygon Preview</label>
+        </div>
+        <div id="plot-info" style="font-size:0.8em; margin-top:10px; border-top: 1px solid #eee; padding-top: 5px;"></div>
+        <div id="level-footprint-info" style="font-size:0.8em; margin-top:5px;"></div>
+    </div>
+   <div id="manual-plot-wrapper">
+            <label style="margin-bottom:2px; font-size:0.85em;">Manual Plot Override (Optional)</label>
+            <div class="input-grid">
+                <input type="number" id="manual-plot-area" placeholder="Area (m²)" class="param-input">
+                <input type="number" id="manual-plot-perim" placeholder="Perim (m)" class="param-input">
+            </div>
+        </div>
+    <div class="control-group">
+        <h3>5. Building Parameters</h3>
+        <div>
+            <label for="project-type-select">Project Type</label>
+            <select id="project-type-select">
+                <option value="Residential">Residential Building</option>
+                <option value="Hotel">Hotel</option>
+                <option value="Villa">Villa</option>
+                <option value="LabourCamp">Labour Camp</option>
+                <option value="School">School</option>
+                <option value="Warehouse">Warehouse</option>
+            </select>
+        </div>
+        <div id="hotel-classification-wrapper" style="display: none; margin-top: 10px;">
+            <label for="hotel-star-rating">Hotel Classification</label>
+            <div style="display: flex; gap: 10px;">
+                <select id="hotel-star-rating" style="flex-grow: 1; margin-bottom: 0;">
+                    <option value="1-star">1 Star</option>
+                    <option value="2-star">2 Star</option>
+                    <option value="3-star" selected>3 Star</option>
+                    <option value="4-star">4 Star</option>
+                    <option value="5-star">5 Star</option>
+                    <option value="6-star">6 Star</option>
+                    <option value="7-star">7 Star</option>
+                </select>
+                <button id="view-hotel-reqs-btn" class="warning" style="width: auto; margin:0;">View Reqs</button>
+            </div>
+        </div>
+         <div id="labour-camp-settings" style="display: none; margin-top: 10px;">
+            <label for="labours-per-room">Labours per Room</label>
+            <input type="number" id="labours-per-room" class="param-input" value="8" min="1" max="10">
+        </div>
+        <div class="input-grid" style="margin-top:10px;">
+            <div><label for="allowedGfa">Allowed Total GFA (m²)</label><input type="number" class="param-input" id="allowedGfa" value="13427"></div>
+            <div><label for="numBasements">Basements</label><input type="number" class="param-input" id="numBasements" value="1" min="0"></div>
+            <div><label for="allowedRetailGfa">Allowed Retail GFA (m²)</label><input type="number" class="param-input" id="allowedRetailGfa" value="0"></div>
+            <div><label for="numPodiums">Podiums</label><input type="number" class="param-input" id="numPodiums" value="3" min="0"></div>
+            <div><label for="allowedOfficeGfa">Allowed Office GFA (m²)</label><input type="number" class="param-input" id="allowedOfficeGfa" value="0"></div>
+            
+            <div><label for="allowedNurseryGfa">Allowed Nursary GFA (m²)</label><input type="number" class="param-input" id="allowedNurseryGfa" value="0"></div>
+            <div><label for="numTypicalFloors">Typical Floors</label><input type="number" class="param-input" id="numTypicalFloors" value="11" min="0"></div>
+             <div><label for="numHotelFloors">Hotel Floors</label><input type="number" class="param-input" id="numHotelFloors" value="0" min="0"></div>
+        </div>
+         <h4 style="margin-top:15px; margin-bottom:5px;">Sellable Area Components</h4>
+         <div class="checkbox-grid">
+            <label><input type="checkbox" class="param-input" id="include-retail-sellable" checked> Retail</label>
+            <label><input type="checkbox" class="param-input" id="include-office-sellable" checked> Office</label>
+            <label><input type="checkbox" class="param-input" id="include-hotel-sellable"> Hotel</label>
+            <label><input type="checkbox" class="param-input" id="include-balcony-sellable" checked> Balcony</label>
+         </div>
+    </div>
+
+    <div class="control-group">
+        <h3>6. Layout Blocks</h3>
+        <label for="serviceBlockType">Select Block(s) (Ctrl+Click)</label>
+        <select id="serviceBlockType" multiple></select>
+        <button id="add-block-btn" disabled>Add Block(s) to Plan</button>
+        <div id="selected-object-controls">
+            <h4>Selected Object</h4>
+            <button id="toggle-lock-btn" class="lock-btn locked">🔒 Locked</button>
+             <div id="dimension-controls-wrapper" class="input-grid" style="margin-bottom:10px;">
+                <div><label for="block-width">Width (m)</label><input type="number" id="block-width" step="0.1"></div>
+                <div><label for="block-height">Height (m)</label><input type="number" id="block-height" step="0.1"></div>
+            </div>
+            <div id="rotation-control-wrapper">
+                <label for="block-rotation">Rotation (°):</label>
+                <input type="number" id="block-rotation" step="1">
+            </div>
+             <div class="button-grid-4" style="margin-top: 5px;">
+                <button id="flip-h-btn" title="Flip Horizontal">H-Flip</button>
+                <button id="flip-v-btn" title="Flip Vertical">V-Flip</button>
+                <button id="rotate-90-btn" title="Rotate 90° Clockwise">90°</button>
+                <button id="align-block-btn" class="warning">Align</button>
+             </div>
+             <div class="button-grid" style="margin-top: 5px;">
+                 <button id="move-level-btn" class="warning">Move to Level</button>
+                 <button id="copy-to-levels-btn" class="warning">Copy to Levels...</button>
+             </div>
+             <button id="delete-block-btn" class="danger" style="margin-top:5px;">Delete Object</button>
+        </div>
+        <h4 style="margin-top:15px;">Placed Service Blocks</h4>
+        <div id="service-block-list" style="font-size:0.8em; max-height: 150px; overflow-y:auto; border: 1px solid #eee; padding: 5px; margin-top: 5px;">
+        </div>
+    </div>
+
+     <div class="control-group">
+        <h3>7. Composite Blocks</h3>
+        <p style="font-size:0.85em; margin-top:-5px; margin-bottom:10px;">Manage and place building cores.</p>
+        <label for="composite-block-select">Select Core</label>
+        <select id="composite-block-select" style="margin-bottom: 5px;"></select>
+        <button id="place-composite-btn" disabled>Place Selected Core</button>
+         <div style="font-size: 0.9em; margin-top: 5px;">
+             <label><input type="checkbox" id="auto-place-core-check"> Auto-place Core on Footprint</label>
+         </div>
+        <div class="button-grid-3" style="margin-top: 5px;">
+            <button id="edit-composite-btn" class="warning">Edit</button>
+            <button id="new-composite-btn" class="active">New</button>
+            <button id="delete-composite-btn" class="danger">Delete</button>
+        </div>
+    </div>
+
+    <div class="control-group">
+        <h3>8. Parking Layout Tool</h3>
+        <p style="font-size:0.85em; margin-top:-5px; margin-bottom:10px;">Draw parking on the currently selected level.</p>
+        <div class="input-grid">
+            <div>
+                <label for="parking-type">Car Parking Type</label>
+                <select id="parking-type">
+                    <option value="perpendicular">Perpendicular</option>
+                    <option value="parallel">Parallel</option>
+                    <option value="angle60">Angled 60°</option>
+                    <option value="angle45">Angled 45°</option>
+                    <option value="angle30">Angled 30°</option>
+                </select>
+            </div>
+            <div>
+                <label for="row-type">Row Type</label>
+                <select id="row-type">
+                    <option value="single">Single Sided</option>
+                    <option value="double">Double Sided</option>
+                </select>
+            </div>
+        </div>
+        <button id="draw-parking-btn" disabled>Draw Car Parking</button>
+        <div class="input-grid" style="margin-top: 10px;">
+             <div>
+                <label for="bus-seater-type">Bus Seater</label>
+                <select id="bus-seater-type">
+                    <option value="30">30 Seater</option>
+                    <option value="35">35 Seater</option>
+                    <option value="40">40 Seater</option>
+                    <option value="45">45 Seater</option>
+                </select>
+            </div>
+            <button id="draw-bus-bay-btn" disabled>Draw Bus Bay</button>
+        </div>
+        <button id="draw-loading-bay-btn" disabled style="margin-top: 5px;">Draw Loading Bay</button>
+
+        <div id="parking-info">
+            <div id="residential-parking-breakdown">
+                <div class="parking-row"><span>Residential Required:</span><b id="parking-required-residential">0</b></div>
+                <div class="parking-row"><span>Office Required:</span><b id="parking-required-office">0</b></div>
+                <div class="parking-row"><span>Retail Required:</span><b id="parking-required-retail">0</b></div>
+            </div>
+            <div id="hotel-parking-breakdown" style="display: none;">
+                <div class="parking-row"><span>Key Room Required:</span><b id="parking-required-hotel-key">0</b></div>
+                <div class="parking-row"><span>Suite Required:</span><b id="parking-required-hotel-suite">0</b></div>
+                <div class="parking-row"><span>Restaurant Required:</span><b id="parking-required-hotel-restaurant">0</b></div>
+                <div class="parking-row"><span>Office Required:</span><b id="parking-required-hotel-office">0</b></div>
+                <div class="parking-row"><span>Ballroom Required:</span><b id="parking-required-hotel-ballroom">0</b></div>
+                <div class="parking-row"><span>Meeting Room Required:</span><b id="parking-required-hotel-meeting">0</b></div>
+                <div class="parking-row"><span>Retail Required:</span><b id="parking-required-hotel-retail">0</b></div>
+            </div>
+             <hr>
+              <div class="parking-row">
+                <label><input type="checkbox" id="parking-override-check"> Manual Override</label>
+                <input type="number" id="parking-override-value" style="width: 70px; padding: 4px; margin:0;" disabled>
+             </div>
+             <div class="parking-row total"><span>Total Required:</span><b id="parking-required-total">0</b></div>
+             <div class="parking-row"><span>Total Provided:</span><b id="parking-provided">0</b></div>
+        </div>
+    </div>
+    
+    <div id="program-specific-controls">
+        <div class="control-group">
+            <h3 id="mix-title">9. Apartment Mix</h3>
+            <div id="apt-mode-toggle" class="button-grid">
+                <label><input type="radio" name="apt-mode" value="auto" checked> Automatic Mix</label>
+                <label><input type="radio" name="apt-mode" value="manual"> Manual Counts</label>
+            </div>
+            <div id="dist-sliders" style="margin-top:10px;">
+                <label for="scenarioSelect">Select a Scenario:</label>
+                <select id="scenarioSelect"></select>
+                <div class="input-grid" style="margin-top: 10px; font-size: 0.9em;">
+                    <div>
+                        <label for="apartment-calc-mode">Calculation Mode</label>
+                        <select id="apartment-calc-mode">
+                            <option value="center">Fit from Center</option>
+                            <option value="offset">Start to End (Corner Offset)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="balcony-placement">Balcony Placement</label>
+                        <select id="balcony-placement">
+                            <option value="recessed">Recessed (Inside Setback)</option>
+                            <option value="projecting">Projecting (Outside Setback)</option>
+                        </select>
+                    </div>
+                </div>
+                 <div style="font-size: 0.9em; margin-top: 10px;">
+                    <label><input type="checkbox" id="double-loaded-corridor"> Double Loaded Corridor</label>
+                </div>
+                <div id="dist-sliders-container" style="margin-top:10px;"></div>
+                <h4 style="text-align:right; margin:5px 0;">Total Mix: <span id="mixTotal">100%</span></h4>
+            </div>
+            <div id="manual-counts-container" style="margin-top:10px; display:none;">
+                 <!-- Manual count inputs will be populated here -->
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3 id="unit-defs-title">10. Unit Definitions</h3>
+            <p style="font-size:0.85em; margin-top:-5px; margin-bottom:10px;">Click a unit to edit.</p>
+            <div id="unit-cards-container"></div>
+        </div>
+    </div>
+
+
+    <div class="control-group">
+        <h3>11. Actions</h3>
+        <button id="calculateBtn" class="active" disabled>Generate Summary Report</button>
+        <button id="generateDetailedReportBtn" class="active" disabled style="margin-top: 5px;">Generate Detailed Report</button>
+        <div class="button-grid" style="margin-top: 5px;">
+            <button id="previewLayoutBtn" disabled>Preview Layout</button>
+            <button id="export-pdf-btn" class="warning" disabled>Export PDF Report</button>
+        </div>
+         <div id="layout-preview-controls" class="checkbox-grid" style="font-size: 0.9em; margin-top: 5px;">
+            <label><input type="checkbox" id="show-balconies-check" checked> Show Balconies</label>
+            <label><input type="checkbox" id="show-corridor-check" checked> Show Corridor</label>
+            <label><input type="checkbox" id="include-screenshots-in-report"> Include Screenshots</label>
+        </div>
+        <div class="button-grid" style="margin-top: 10px;">
+            <button id="generate3dBtn" disabled>Generate 3D Model</button>
+            <button id="exportScadBtn" disabled>Export OpenSCAD</button>
+        </div>
+        <div id="threed-visibility-controls" class="checkbox-grid" style="font-size: 0.9em; margin-top: 5px;">
+            <label><input type="checkbox" id="show-apartments-3d" checked> Show Apartments</label>
+            <label><input type="checkbox" id="show-balconies-3d" checked> Show Balconies</label>
+            <label><input type="checkbox" id="show-service-blocks-3d" checked> Show Service Blocks</label>
+            <label><input type="checkbox" id="show-affection-plan-3d" checked> Show Affection Plan</label>
+            <label><input type="checkbox" id="show-typical-polygon-3d" checked> Show Typical Polygon</label>
+        </div>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="zoom-controls">
+        <button id="pan-btn" title="Pan Tool (Hold Spacebar)">✋ Pan</button>
+        <button id="zoom-in-btn">+</button>
+        <button id="zoom-out-btn">-</button>
+        <button id="zoom-reset-btn">Reset Zoom</button>
+    </div>
+    <div class="canvas-container-wrapper">
+        <canvas id="plot-canvas"></canvas>
+        <canvas id="overlay-canvas"></canvas>
+    </div>
+    <div id="floating-dashboard">
+    <div id="floating-header">
+        <span>Live Feasibility Status</span>
+        <span id="minimize-dash" style="font-size:1.2em;">−</span>
+    </div>
+    <div id="floating-content">
+        <div class="dash-row header">GFA & Efficiency</div>
+        <div class="dash-row"><span>Total Allowed GFA:</span> <span class="dash-val" id="dash-allowed-gfa">0</span></div>
+        <div class="dash-row"><span>Consumed GFA:</span> <span class="dash-val" id="dash-consumed-gfa">0</span></div>
+        <div class="dash-row"><span>Balance:</span> <span class="dash-val" id="dash-balance-gfa">0</span></div>
+        <div class="dash-row"><span>Built-Up Area (BUA):</span> <span class="dash-val" id="dash-bua">0</span></div>
+        <div class="dash-row"><span>Efficiency (GFA/BUA):</span> <span class="dash-val" id="dash-efficiency">0%</span></div>
+
+        <div class="dash-row header">GFA Breakdown</div>
+        <div class="dash-row"><span>Residential:</span> <span class="dash-val" id="dash-res-gfa">0</span></div>
+        <div class="dash-row"><span>Retail:</span> <span class="dash-val" id="dash-retail-gfa">0</span></div>
+        <div class="dash-row"><span>Office:</span> <span class="dash-val" id="dash-office-gfa">0</span></div>
+        <div class="dash-row"><span>Nursery:</span> <span class="dash-val" id="dash-nursery-gfa">0</span></div>
+
+        <div class="dash-row header">Residential Stats</div>
+        <div class="dash-row"><span>Sellable Area:</span> <span class="dash-val" id="dash-sellable">0</span></div>
+        <div id="dash-wing-details" style="font-size: 0.9em; margin-top: 5px;"></div>
+        
+        <div class="dash-row header">Occupancy & Services</div>
+        <div class="dash-row"><span>Est. Occupancy:</span> <span class="dash-val" id="dash-occupancy">0</span></div>
+        <div class="dash-row"><span>Garbage Bins Req.:</span> <span class="dash-val" id="dash-garbage-req">0</span></div>
+        <div class="dash-row"><span>Water Req:</span> <span class="dash-val" id="dash-water-req">0 m³/d</span></div>
+        <div class="dash-row header" style="font-size:0.9em; margin-top:5px; background:#e3f2fd;">Power</div>
+        <div class="dash-row"><span>Elec Load:</span> <span class="dash-val" id="dash-elec-load">0 kVA</span></div>
+        <div class="dash-row"><span>RMU Area Provided:</span> <span class="dash-val" id="dash-rmu-area">0 m²</span></div>
+        <div class="dash-row"><span>Substation Area Req:</span> <span class="dash-val" id="dash-substation-req">0 m²</span></div>
+    </div>
+</div>
+    <div id="status-bar">Upload a site plan to begin.</div>
+    <div id="report-container"></div>
+</div>
+
+<!-- All modals remain in HTML for simplicity -->
+<div id="level-op-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3 id="level-op-title">Level Operation</h3>
+        <div id="copy-level-content" style="display: none;">
+            <p>Select destination levels:</p>
+            <div id="level-checklist"></div>
+        </div>
+        <div id="move-level-content" style="display: none;">
+            <p>Select new destination level:</p>
+            <select id="level-select-dropdown" style="margin-top:10px;"></select>
+        </div>
+        <div class="button-grid" style="margin-top:20px;">
+            <button id="confirm-level-op-btn">Confirm</button>
+            <button id="cancel-level-op-btn" class="danger">Cancel</button>
+        </div>
+    </div>
+</div>
+<div id="hotel-req-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h3 id="hotel-req-title">Hotel Requirements</h3>
+        <div id="hotel-req-body"></div>
+        <div style="margin-top:20px;">
+            <button id="close-hotel-req-btn" class="danger" style="width: 100px; float: right;">Close</button>
+        </div>
+    </div>
+</div>
+<div id="threed-modal" class="modal-overlay">
+    <div id="threed-modal-content">
+        <button id="close-threed-modal" class="danger">X</button>
+        <canvas id="threed-canvas"></canvas>
+    </div>
+</div>
+<div id="edit-unit-modal" class="modal-overlay">
+    <div id="edit-unit-modal-content" class="modal-content">
+        <h3 id="edit-unit-title">Edit Unit</h3>
+        <div id="edit-unit-body" style="margin-top:15px; max-height: 60vh; overflow-y:auto;"></div>
+        <div class="button-grid" style="margin-top:20px;">
+            <button id="save-unit-btn" class="active">Save Changes</button>
+            <button id="cancel-unit-btn" class="danger">Cancel</button>
+        </div>
+    </div>
+</div>
+<div id="edit-composite-modal" class="modal-overlay">
+    <div id="edit-composite-modal-content" class="modal-content">
+        <h3 id="edit-composite-title">Edit Composite Block</h3>
+        <div class="input-grid" style="margin-bottom:15px;">
+             <div>
+                <label for="composite-block-name-input">Core Name:</label>
+                <input type="text" id="composite-block-name-input" placeholder="e.g., Residential Core 2" style="margin-bottom:0;">
+             </div>
+             <div>
+                <label for="composite-default-level">Default Level:</label>
+                <select id="composite-default-level" style="margin-bottom:0;"></select>
+             </div>
+        </div>
+        <div id="composite-sub-blocks-list"></div>
+        <h4>Add New Block</h4>
+        <div id="add-sub-block-form">
+            <select id="add-sub-block-select" style="flex-grow:1; margin-bottom: 0;"></select>
+            <button id="add-sub-block-btn" style="width: auto; padding: 10px 15px; margin-top:0;">Add</button>
+        </div>
+        <div class="button-grid" style="margin-top:20px;">
+            <button id="save-composite-btn" class="active">Save Changes</button>
+            <button id="cancel-composite-btn" class="danger">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
+      }
+    }
+</script>
+<script type="module" src="main.js"></script>
+
+</body>
+</html>
