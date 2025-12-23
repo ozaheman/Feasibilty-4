@@ -1,12 +1,16 @@
+
+//--- START OF FILE io.js ---
+
 // MODULE 11: IO (io.js equivalent)
 // =====================================================================
 import { state, resetState, setScale,rehydrateProgram  } from './state.js';
-import { handleFinishPolygon } from './eventHandlers.js';
+import { handleFinishPolygon, createCompositeGroup  } from './eventHandlers.js';
 import { zoomToObject, setCanvasBackground, renderPdfToBackground } from './canvasController.js';
 import { updateUI } from './uiController.js';
-import { PROJECT_PROGRAMS } from './config.js';
+import { PROJECT_PROGRAMS, PREDEFINED_BLOCKS, BLOCK_CATEGORY_COLORS } from './config.js';
+import { f } from './utils.js';
 
-function downloadFile(filename, content, mimeType) {
+export function downloadFile(filename, content, mimeType) {
     const blob = new Blob([content], { type: mimeType });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -175,6 +179,12 @@ export function exportProjectZIP(canvas) {
     const plotPropsNode = doc.createElement("PlotEdgeProperties");
     plotPropsNode.textContent = JSON.stringify(state.plotEdgeProperties);
     projectNode.appendChild(plotPropsNode);
+    
+    // NEW: Add action history to XML
+    const historyNode = doc.createElement("ActionHistory");
+    historyNode.textContent = JSON.stringify(state.actionHistory);
+    projectNode.appendChild(historyNode);
+
     const canvasNode = doc.createElement("CanvasObjects");
     const objectsToExport = canvas.getObjects().filter(obj => !obj.isSnapPoint && !obj.isEdgeHighlight && !obj.isSnapIndicator);
     objectsToExport.forEach(obj => {
@@ -198,6 +208,24 @@ export function exportProjectZIP(canvas) {
     if (state.originalDxfContent) {
         zip.file("overlay.dxf", state.originalDxfContent);
     }
+     // 4. NEW: Generate and add Service Block Area Statement CSV
+    if (state.serviceBlocks.length > 0 && state.scale.ratio > 0) {
+        let csvContent = "Block ID,Block Name,Level,Category,Area (sqm)\n";
+        state.serviceBlocks.forEach(block => {
+            if (block.blockData) {
+                const areaM2 = (block.getScaledWidth() * block.getScaledHeight()) * (state.scale.ratio * state.scale.ratio);
+                const row = [
+                    `"${block.blockId || 'N/A'}"`,
+                    `"${block.blockData.name || 'Unnamed'}"`,
+                    `"${block.level || 'Unassigned'}"`,
+                    `"${(block.blockData.category || 'default').toUpperCase()}"`,
+                    `${f(areaM2, 2).replace(/,/g, '')}` // Use f() but remove commas for CSV
+                ].join(',');
+                csvContent += row + "\n";
+            }
+        });
+        zip.file("service_block_schedule.csv", csvContent);
+    }
 
     // 4. Generate and Download ZIP
     zip.generateAsync({ type: "blob" })
@@ -206,19 +234,16 @@ export function exportProjectZIP(canvas) {
         });
 }
 
-export function importProjectZIP(file, canvas, onComplete) {
-    JSZip.loadAsync(file).then(async (zip) => {
+export async function importProjectZIP(file, canvas, onComplete) {
+    try {
+        const zip = await JSZip.loadAsync(file);
         const xmlFile = zip.file("project.xml");
-        if (!xmlFile) {
-            throw new Error("project.xml not found in the zip archive.");
-        }
+        if (!xmlFile) throw new Error("project.xml not found in the zip archive.");
         
         const xmlContent = await xmlFile.async("string");
-        
-        // --- PARSE XML FIRST ---
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
-        if (xmlDoc.getElementsByTagName("parsererror").length) { throw new Error("XML parsing error."); }
+        if (xmlDoc.getElementsByTagName("parsererror").length) throw new Error("XML parsing error.");
         
         canvas.clear();
         
@@ -226,10 +251,11 @@ export function importProjectZIP(file, canvas, onComplete) {
         if (scaleNode) {
             const pixels = parseFloat(scaleNode.getAttribute("pixels"));
             const meters = parseFloat(scaleNode.getAttribute("meters"));
-            if (pixels > 0 && meters > 0) { setScale(pixels, meters); }
+            if (pixels > 0 && meters > 0) setScale(pixels, meters);
         }
+        
         const plotPropsNode = xmlDoc.querySelector("PlotEdgeProperties");
-        if (plotPropsNode && plotPropsNode.textContent) { state.plotEdgeProperties = JSON.parse(plotPropsNode.textContent); }
+        if (plotPropsNode && plotPropsNode.textContent) state.plotEdgeProperties = JSON.parse(plotPropsNode.textContent);
         
         let projectType = 'Residential';
         const paramsNode = xmlDoc.querySelector("Parameters");
@@ -240,64 +266,210 @@ export function importProjectZIP(file, canvas, onComplete) {
                 if (paramNode.nodeType === 1) {
                     const input = document.getElementById(paramNode.tagName);
                     if (input) {
-                        if (input.type === 'checkbox') { input.checked = paramNode.textContent === 'true'; } 
-                        else { input.value = paramNode.textContent; }
+                        if (input.type === 'checkbox') input.checked = paramNode.textContent === 'true'; 
+                        else input.value = paramNode.textContent;
                     }
                 }
             });
         }
         state.projectType = projectType;
+
         const programNode = xmlDoc.querySelector("ProgramData");
         if(programNode && programNode.textContent) {
             const plainProgramData = JSON.parse(programNode.textContent);
             const masterProgram = PROJECT_PROGRAMS[projectType];
             state.currentProgram = rehydrateProgram(plainProgramData, masterProgram);
         }
-        const customBlocksNode = xmlDoc.querySelector("UserCompositeBlocks");
-        if(customBlocksNode && customBlocksNode.textContent){ state.userCompositeBlocks = JSON.parse(customBlocksNode.textContent); }
-
-        const objectNodes = xmlDoc.querySelectorAll("CanvasObjects > Object");
-        const fabricObjects = [];
-        objectNodes.forEach(node => fabricObjects.push(JSON.parse(node.textContent)));
         
-        // --- LOAD CANVAS OBJECTS ---
-        fabric.util.enlivenObjects(fabricObjects, async (enlivenedObjects) => {
-            enlivenedObjects.forEach(obj => canvas.add(obj));
-            canvas.renderAll();
+        const customBlocksNode = xmlDoc.querySelector("UserCompositeBlocks");
+        if(customBlocksNode && customBlocksNode.textContent) state.userCompositeBlocks = JSON.parse(customBlocksNode.textContent);
 
-            // --- NOW LOAD BACKGROUND AND DXF ASSETS ---
-            // Find plan file (pdf, png, jpg, etc.)
+        // NEW: Load action history (replay logic would go here)
+        const historyNode = xmlDoc.querySelector("ActionHistory");
+        if (historyNode && historyNode.textContent) {
+            state.actionHistory = JSON.parse(historyNode.textContent);
+            // NOTE: Full replay logic is complex and not implemented here.
+            // A full implementation would iterate through actionHistory and re-apply each action.
+            // For now, we will continue to load the final state of canvas objects.
+        }
+        
+        // The `enlivenObjects` function correctly restores Fabric objects along with their custom properties
+        // like `isPlot`, `isFootprint`, `level`, etc., which were saved during export.
+        // The callback in `handleImportZIP` will then iterate through these restored objects
+        // to repopulate the application's state variables (`state.plotPolygon`, `state.levels`, etc.).
+        const objectNodes = xmlDoc.querySelectorAll("CanvasObjects > Object");
+        const fabricObjects = Array.from(objectNodes).map(node => JSON.parse(node.textContent));
+
+        fabric.util.enlivenObjects(fabricObjects, async (enlivenedObjects) => {// Re-create composite groups correctly
+            const recreatedObjects = [];
+            const tempGroups = {};
+
+            canvas.clear();
+            enlivenedObjects.forEach(obj => {
+                if (obj.isCompositeGroup) {
+                    // Ensure sub-objects are not selectable initially
+                    obj.forEachObject(subObj => subObj.set({selectable: false, evented: false}));
+                }
+                canvas.add(obj);
+            });
+            
             const planFileRegex = /\.(pdf|png|jpe?g)$/i;
             const planZipObject = Object.values(zip.files).find(f => !f.dir && planFileRegex.test(f.name));
-
             if (planZipObject) {
-                state.originalPlanFile = await planZipObject.async("blob");
-                // Manually add name property for compatibility
-                state.originalPlanFile.name = planZipObject.name; 
+                const blob = await planZipObject.async("blob");
+                state.originalPlanFile = new File([blob], planZipObject.name, { type: blob.type });
 
                 if (planZipObject.name.toLowerCase().endsWith('.pdf')) {
                     const arrayBuffer = await planZipObject.async("arraybuffer");
                     window.currentPdfData = arrayBuffer;
-                    await renderPdfToBackground(arrayBuffer, 1);
+                    const pdfImg = await renderPdfToBackground(arrayBuffer, 1);
+                    if (pdfImg) setCanvasBackground(pdfImg);
                 } else {
                     const dataUrl = URL.createObjectURL(state.originalPlanFile);
                     setCanvasBackground(dataUrl);
                 }
             }
 
-            // Find DXF file
             const dxfZipObject = zip.file("overlay.dxf");
             if (dxfZipObject) {
                 const dxfText = await dxfZipObject.async("string");
                 state.originalDxfContent = dxfText;
                 parseAndDisplayDxf(dxfText);
             }
-
+            
+            canvas.renderAll();
             if (onComplete) onComplete();
         });
 
-    }).catch((error) => {
+    } catch (error) {
         console.error("Failed to import ZIP:", error);
-        document.getElementById('status-bar').textContent = "Error: Could not parse the project file. It may be corrupt or not a valid project zip.";
+        document.getElementById('status-bar').textContent = `Error: ${error.message}`;
+    }
+}
+
+// NEW: Function to export service blocks as a CSV file
+export function exportServiceBlocksCSV() {
+    if (state.serviceBlocks.length === 0 || state.scale.ratio === 0) {
+        document.getElementById('status-bar').textContent = 'No service blocks to export.';
+        return;
+    }
+
+    let csvContent = "ID,Name,Level,Category,Area (sqm)\n";
+    const scaleSq = state.scale.ratio * state.scale.ratio;
+
+    const allBlocks = [];
+    state.serviceBlocks.forEach(block => {
+        if (block.isCompositeGroup) {
+            block.getObjects().forEach(subBlock => allBlocks.push(subBlock));
+        } else if (block.isServiceBlock) {
+            allBlocks.push(block);
+        }
     });
+
+    allBlocks.forEach(block => {
+        if (block.blockData) {
+            const areaM2 = (block.getScaledWidth() * block.getScaledHeight()) * scaleSq;
+            const row = [
+                `"${block.blockId || 'N/A'}"`,
+                `"${block.blockData.name || 'Unnamed'}"`,
+                `"${block.level || 'Unassigned'}"`,
+                `"${block.blockData.category || 'default'}"`,
+                `${areaM2.toFixed(2)}` // Keep it simple for CSV
+            ].join(',');
+            csvContent += row + "\n";
+        }
+    });
+
+    downloadFile("service_block_schedule.csv", csvContent, "text/csv;charset=utf-8;");
+    document.getElementById('status-bar').textContent = 'Service block schedule exported as CSV.';
+}
+
+// NEW: Function to import service blocks from a CSV file
+export function importServiceBlocksCSV(file, onComplete) {
+    if (!file) return;
+    if (state.scale.ratio === 0) {
+        alert('Please set the scale before importing blocks.');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const csvText = event.target.result;
+            const rows = csvText.split('\n').filter(row => row.trim() !== '');
+            if (rows.length < 2) throw new Error("CSV is empty or contains only a header.");
+
+            const header = rows.shift().toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
+
+            // Find column indices
+            const nameIndex = header.indexOf('name');
+            const levelIndex = header.indexOf('level');
+            const categoryIndex = header.indexOf('category');
+
+            if (nameIndex === -1 || levelIndex === -1) {
+                throw new Error("CSV must contain 'Name' and 'Level' columns.");
+            }
+            
+            let blocksCreated = 0;
+            const placementStart = { x: 100, y: 100 }; // Default placement position
+
+            rows.forEach((row, rowIndex) => {
+                const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
+                const blockName = values[nameIndex];
+                const levelName = values[levelIndex];
+                const categoryName = categoryIndex > -1 ? values[categoryIndex] : 'default';
+
+                // Find the original block definition by name
+                const blockKey = Object.keys(PREDEFINED_BLOCKS).find(key => PREDEFINED_BLOCKS[key].name === blockName);
+                if (!blockKey) {
+                    console.warn(`Could not find a predefined block named "${blockName}" from CSV row ${rowIndex + 1}. Skipping.`);
+                    return;
+                }
+
+                const blockData = { ...PREDEFINED_BLOCKS[blockKey] }; // Create a copy
+                blockData.category = categoryName; // Override category if specified in CSV
+
+                // Create the block using similar logic to placeServiceBlock
+                const blockWidth = blockData.width / state.scale.ratio;
+                const blockHeight = blockData.height / state.scale.ratio;
+                const colors = BLOCK_CATEGORY_COLORS[blockData.category || 'default'];
+                const blockId = `SB-${state.serviceBlockCounter++}`;
+                
+                const rect = new fabric.Rect({ width: blockWidth, height: blockHeight, fill: colors.fill, stroke: colors.stroke, strokeWidth: 2, originX: 'center', originY: 'center', strokeUniform: true });
+                const label = new fabric.Text(blockId, { fontSize: Math.min(blockWidth, blockHeight) * 0.2, fill: '#fff', backgroundColor: 'rgba(0,0,0,0.4)', originX: 'center', originY: 'center' });
+                const lockIcon = new fabric.Text("🔒", { fontSize: Math.min(blockWidth, blockHeight) * 0.2, left: Math.min(blockWidth, blockHeight) * 0.2, originY: 'center', visible: true });
+                
+                const group = new fabric.Group([rect, label, lockIcon], {
+                    left: placementStart.x + (blocksCreated % 10) * 15, // Stagger placement
+                    top: placementStart.y + Math.floor(blocksCreated / 10) * 15,
+                    originX: 'center', 
+                    originY: 'center',
+                    isServiceBlock: true, 
+                    blockData: blockData, 
+                    blockId: blockId, 
+                    level: levelName, 
+                    selectable: true,
+                    evented: true,
+                    lockScalingX: true,
+                    lockScalingY: true,
+                });
+                
+                state.serviceBlocks.push(group);
+                state.canvas.add(group);
+                blocksCreated++;
+            });
+
+            if (blocksCreated > 0) {
+                document.getElementById('status-bar').textContent = `Successfully imported ${blocksCreated} service blocks.`;
+                if (onComplete) onComplete();
+            } else {
+                document.getElementById('status-bar').textContent = 'Import complete, but no matching blocks were found to create.';
+            }
+
+        } catch (error) {
+            console.error("CSV Import Error:", error);
+            document.getElementById('status-bar').textContent = `Error importing CSV: ${error.message}`;
+        }
+    };
+    reader.readAsText(file);
 }

@@ -1,9 +1,12 @@
+
+
 import * as THREE from "three";
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { state } from './state.js';
 import { LEVEL_ORDER, LEVEL_DEFINITIONS, LEVEL_HEIGHTS, BLOCK_CATEGORY_COLORS } from './config.js';
 import { orthogonalizePolygon } from './utils.js';
 import { layoutFlatsOnPolygon } from "./apartmentLayout.js";
+import { downloadFile } from './io.js';
 
 let scene, camera, renderer, controls, buildingGroup, animationFrameId;
 
@@ -200,5 +203,91 @@ export function  generate3DBuilding() {
     show3DModal();
 }
 export function  generateOpenScadScript() { 
-    document.getElementById('status-bar').textContent = "OpenSCAD export functionality is pending implementation.";
+    if (state.scale.ratio === 0) {
+        document.getElementById('status-bar').textContent = "Please set the scale before generating a 3D model.";
+        return;
+    }
+
+    const allFootprints = Object.values(state.levels).flatMap(level => level.objects.filter(o => o.isFootprint));
+    if (allFootprints.length === 0 && state.serviceBlocks.length === 0) {
+        document.getElementById('status-bar').textContent = "No building footprints or blocks drawn to generate a model.";
+        return;
+    }
+
+    const allPoints = allFootprints.flatMap(f => f.points);
+    if (state.plotPolygon) allPoints.push(...state.plotPolygon.points);
+    const centerOffset = calculateCenterOffset(allPoints);
+    const uiParams = getUIParams();
+
+    let script = `// Generated Feasibility Model\n// Units are in meters.\n\n`;
+    
+    // Helper module for extruding polygons
+    script += `module extrude_shape(points, height) {\n`;
+    script += `  linear_extrude(height = height) {\n`;
+    script += `    polygon(points = points);\n`;
+    script += `  }\n`;
+    script += `}\n\n`;
+
+    let currentZ = 0;
+
+    // Process levels in order
+    LEVEL_ORDER.forEach(levelName => {
+        const levelDef = LEVEL_DEFINITIONS[levelName];
+        const height = LEVEL_HEIGHTS[levelName] || LEVEL_HEIGHTS.default;
+        const numFloors = levelDef.countKey ? (uiParams[levelDef.countKey] || (levelName.includes('Last') ? 0 : 1)) : 1;
+
+        if (numFloors === 0) return;
+
+        script += `// ================ LEVEL: ${levelName.replace(/_/g, ' ')} (x${numFloors}) ================\n`;
+        
+        let zStart = currentZ;
+        if (levelName.startsWith('Basement')) {
+            zStart = -height; // Place first basement below zero
+            if (numFloors > 1) {
+                // If multiple basements, they stack downwards from the first
+                zStart = -(height * uiParams.numBasements);
+            }
+        }
+        
+        for (let i = 0; i < numFloors; i++) {
+            const floorZ = zStart + (i * height);
+
+            // Footprints
+            state.levels[levelName].objects.filter(o => o.isFootprint).forEach((footprint, index) => {
+                script += `// Level: ${levelName} | Footprint ${index + 1}\n`;
+                const pointsStr = footprint.points.map(p => 
+                    `[(${(p.x - centerOffset.x) * state.scale.ratio}), (${-(p.y - centerOffset.y) * state.scale.ratio})]`
+                ).join(', ');
+
+                script += `translate([0, 0, ${floorZ}]) {\n`;
+                script += `  extrude_shape(points=[${pointsStr}], height=${height});\n`;
+                script += `}\n`;
+            });
+
+            // Service Blocks
+            state.serviceBlocks.filter(b => b.level === levelName).forEach(block => {
+                const width = block.getScaledWidth() * state.scale.ratio;
+                const depth = block.getScaledHeight() * state.scale.ratio;
+                const blockX = (block.left - centerOffset.x) * state.scale.ratio;
+                const blockY = -(block.top - centerOffset.y) * state.scale.ratio;
+                const angle = -block.angle;
+
+                script += `// Level: ${levelName} | Block ID: ${block.blockId} | Name: ${block.blockData.name}\n`;
+                script += `translate([${blockX}, ${blockY}, ${floorZ}]) {\n`;
+                script += `  rotate([0, 0, ${angle}]) {\n`;
+                script += `    translate([-(${width}/2), -(${depth}/2), 0]) {\n`;
+                script += `      cube([${width}, ${depth}, ${height}]);\n`;
+                script += `    }\n`;
+                script += `  }\n`;
+                script += `}\n`;
+            });
+        }
+        
+        if (!levelName.startsWith('Basement')) {
+             currentZ += height * numFloors;
+        }
+    });
+
+    downloadFile("model.scad", script, "application/openscad");
+    document.getElementById('status-bar').textContent = "OpenSCAD script generated and download started.";
 }

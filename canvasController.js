@@ -50,9 +50,11 @@ export function clearCanvasBackground() {
      syncOverlayCanvasSize();
 }
 export function setCanvasBackground(source) {
+    if (!source) return; 
+
     if (typeof source === 'string') {
         fabric.Image.fromURL(source, (img) => {
-            fitAndSetBg(img);
+            if (img) fitAndSetBg(img);
         });
     } else {
         fitAndSetBg(source);
@@ -60,9 +62,14 @@ export function setCanvasBackground(source) {
 }
 
 function fitAndSetBg(fabricImage) {
+    if (!fabricImage) return; 
+
     const mainContent = document.querySelector('.main-content');
     const maxWidth = mainContent.clientWidth * 0.95;
     const maxHeight = (window.innerHeight - 150) * 0.9;
+    
+    if (!fabricImage.width || !fabricImage.height) return;
+
     const scaleFactor = Math.min(maxWidth / fabricImage.width, maxHeight / fabricImage.height, 1);
 
     state.canvas.setWidth(fabricImage.width * scaleFactor);
@@ -79,6 +86,7 @@ function fitAndSetBg(fabricImage) {
 
 export async function renderPdfToBackground(pdfData, pageNum, renderScale = 2.0) {
     try {
+        if (!pdfData) return null;
         const pdf = await pdfjsLib.getDocument(pdfData).promise;
         if (pageNum > pdf.numPages || pageNum < 1) {
             document.getElementById('status-bar').textContent = `Error: Page ${pageNum} does not exist.`;
@@ -94,8 +102,10 @@ export async function renderPdfToBackground(pdfData, pageNum, renderScale = 2.0)
         
         return new Promise(resolve => {
             fabric.Image.fromURL(tempCanvas.toDataURL(), (img) => {
-                img.isPdf = true;
-                img.renderingScale = renderScale;
+                if (img) {
+                    img.isPdf = true;
+                    img.renderingScale = renderScale;
+                }
                 resolve(img);
             });
         });
@@ -146,29 +156,48 @@ export function redrawApartmentPreview(layoutData) {
     const vpt =  state.canvas.viewportTransform;
     overlayCtx.save();
     overlayCtx.setTransform(vpt[0], vpt[1], vpt[2], vpt[3], vpt[4], vpt[5]);
-    const { placedFlats, innerCorridorPolyPoints, outerCorridorPolyPoints } = layoutData;
+    const { placedFlats, innerCorridorPolyPoints, outerCorridorPolyPoints, corridorPoly, staircaseValidation } = layoutData;
     const showBalconies = document.getElementById('show-balconies-check').checked;
     const showCorridor = document.getElementById('show-corridor-check').checked;
 
-    const drawDashedPoly = (points, color) => {
-        if (!points || points.length < 2) return;
-        overlayCtx.beginPath();
-        overlayCtx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            overlayCtx.lineTo(points[i].x, points[i].y);
-        }
-        overlayCtx.closePath();
-        overlayCtx.strokeStyle = color;
-        overlayCtx.lineWidth = 1.5 / state.canvas.getZoom();
-        overlayCtx.setLineDash([5 / state.canvas.getZoom(), 5 / state.canvas.getZoom()]);
-        overlayCtx.stroke();
-    };
-    
     if (showCorridor) {
-        drawDashedPoly(innerCorridorPolyPoints, '#8B4513'); // Brown for inner wall
-        drawDashedPoly(outerCorridorPolyPoints, '#D2691E'); // Lighter brown for outer wall
+        if (corridorPoly && corridorPoly.length > 2) {
+            // Draw Closed Linear Corridor
+            overlayCtx.beginPath();
+            overlayCtx.moveTo(corridorPoly[0].x, corridorPoly[0].y);
+            for (let i = 1; i < corridorPoly.length; i++) {
+                overlayCtx.lineTo(corridorPoly[i].x, corridorPoly[i].y);
+            }
+            overlayCtx.closePath();
+            overlayCtx.fillStyle = 'rgba(139, 69, 19, 0.2)'; // Light brown fill
+            overlayCtx.fill();
+            overlayCtx.strokeStyle = '#8B4513';
+            overlayCtx.lineWidth = 1.5 / state.canvas.getZoom();
+            overlayCtx.stroke();
+        } else {
+            // Draw Dashed Lines for Closed Polygon (Donut style)
+            const drawDashedPoly = (points, color) => {
+                if (!points || points.length < 2) return;
+                overlayCtx.beginPath();
+                overlayCtx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    overlayCtx.lineTo(points[i].x, points[i].y);
+                }
+                overlayCtx.closePath();
+                overlayCtx.strokeStyle = color;
+                overlayCtx.lineWidth = 1.5 / state.canvas.getZoom();
+                overlayCtx.setLineDash([5 / state.canvas.getZoom(), 5 / state.canvas.getZoom()]);
+                overlayCtx.stroke();
+            };
+            drawDashedPoly(innerCorridorPolyPoints, '#8B4513'); // Brown for inner wall
+            drawDashedPoly(outerCorridorPolyPoints, '#D2691E'); // Lighter brown for outer wall
+            overlayCtx.setLineDash([]); // Reset line dash
+        }
     }
-    overlayCtx.setLineDash([]); // Reset line dash
+
+    if (staircaseValidation && staircaseValidation.message) {
+         document.getElementById('status-bar').textContent = `Staircase Validation: ${staircaseValidation.message}`;
+    }
 
     for (const flat of placedFlats) {
         // Draw the main unit
@@ -185,7 +214,7 @@ export function redrawApartmentPreview(layoutData) {
         overlayCtx.restore();
 
         // Draw the balcony
-        if (showBalconies && flat.type.balconyMultiplier > 0) {
+        if (showBalconies && flat.type.balconyMultiplier > 0 && flat.hasBalcony) {
             overlayCtx.save();
             overlayCtx.translate(flat.balconyCenter.x, flat.balconyCenter.y);
             overlayCtx.rotate(flat.angle);

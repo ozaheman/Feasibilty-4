@@ -1,16 +1,20 @@
+//--- START OF FILE eventHandlers.js ---
+
 // MAIN EXECUTION & INITIALIZATION
 // =====================================================================
 import { initCanvas, resetZoom,renderPdfToBackground,zoomCanvas ,getCanvas ,clearOverlay ,setCanvasBackground ,getOverlayContext ,redrawApartmentPreview, zoomToObject  } from './canvasController.js';
 import { resetState,setCurrentLevel,state,setCurrentMode,setScale, toggleAllLayersVisibility ,rehydrateProgram  } from './state.js';
-import { initDrawingTools,handleDblClick, getSetbackPolygonPoints,handleCanvasMouseMove,clearSetbackGuides,clearEdgeHighlight,updateAlignmentHighlight,resetDrawingState,handleCanvasMouseDown,clearEdgeSnapIndicator ,finishScaling,drawSetbackGuides,findSnapPoint ,updateSnapIndicators,drawMeasurement, getClickedPlotEdge, getNearestEdge, snapObjectToEdge, alignObjectToEdge , updateEdgeHighlight           } from './drawingTools.js'; 
+import { initDrawingTools,handleDblClick, getSetbackPolygonPoints,handleCanvasMouseMove,clearSetbackGuides,clearEdgeHighlight,updateAlignmentHighlight,resetDrawingState,handleCanvasMouseDown,clearEdgeSnapIndicator ,finishScaling,drawSetbackGuides,findSnapPoint ,updateSnapIndicators,drawMeasurement, getClickedPlotEdge, findNearestParkingEdge, getNearestEdge, snapObjectToEdge, alignObjectToEdge , updateEdgeHighlight, getClickedPolygonEdge, makeFootprintEditable, makeFootprintUneditable, refreshEditablePolygon            } from './drawingTools.js'; 
 import { regenerateParkingInGroup, generateLinearParking   } from './parkingLayoutUtils.js';
 import { init3D,generate3DBuilding , generateOpenScadScript  } from './viewer3d.js';
-import { initUI, updateUI,displayHotelRequirements ,placeSelectedComposite, handleConfirmLevelOp  ,applyLevelVisibility ,updateLevelFootprintInfo ,renderServiceBlockList,updateSelectedObjectControls , openLevelOpModal,updateParkingDisplay,toggleFloatingPanel,updateDashboard,toggleBlockLock, saveUnitChanges, openNewCompositeEditor, editSelectedComposite, deleteSelectedComposite, saveCompositeChanges, addSubBlockToCompositeEditor, applyScenario, toggleApartmentMode, openEditUnitModal,updateLevelCounts, populateServiceBlocksDropdown, updateProgramUI      } from './uiController.js';
+import { initUI, updateUI,displayHotelRequirements ,placeSelectedComposite, handleConfirmLevelOp  ,applyLevelVisibility ,updateLevelFootprintInfo ,renderServiceBlockList,updateSelectedObjectControls , openLevelOpModal,updateParkingDisplay,toggleFloatingPanel,updateDashboard,toggleBlockLock, saveUnitChanges, openNewCompositeEditor, editSelectedComposite, deleteSelectedComposite, saveCompositeChanges, addSubBlockToCompositeEditor, applyScenario, toggleApartmentMode, openEditUnitModal,updateLevelCounts, populateServiceBlocksDropdown, updateProgramUI ,updateMixTotal, updateScreenshotGallery, openAreaStatementModal     } from './uiController.js';
 import { exportReportAsPDF,generateReport  } from './reportGenerator.js';
-import { PROJECT_PROGRAMS, AREA_STATEMENT_DATA ,PREDEFINED_BLOCKS , BLOCK_CATEGORY_COLORS } from './config.js';
-import { allocateCountsByPercent, getPolygonProperties, getOffsetPolygon } from './utils.js';
+import { PROJECT_PROGRAMS, AREA_STATEMENT_DATA ,PREDEFINED_BLOCKS , BLOCK_CATEGORY_COLORS, LEVEL_ORDER } from './config.js';
+import { allocateCountsByPercent, getPolygonProperties, getOffsetPolygon, isPointInRotatedRect, f } from './utils.js';
 import { layoutFlatsOnPolygon } from './apartmentLayout.js';
-import { handleDxfUpload, assignDxfAsPlot,finalizeDxf,deleteDxf,updateDxfStrokeWidth, exportProjectZIP, importProjectZIP  } from './io.js';
+import { handleDxfUpload, assignDxfAsPlot,finalizeDxf,deleteDxf,updateDxfStrokeWidth, exportProjectZIP, importProjectZIP, exportServiceBlocksCSV, importServiceBlocksCSV  } from './io.js';
+import { recordAction } from './actionRecorder.js'; // NEW: for action recorder
+import { updateSubstationSize } from './feasibilityEngine.js';
 
 export function setupEventListeners() {
      if (!state.canvas) {
@@ -71,9 +75,13 @@ export function setupEventListeners() {
     document.getElementById('draw-plot-btn').addEventListener('click', () => enterMode('drawingPlot'));
     document.getElementById('draw-guide-btn').addEventListener('click', () => enterMode('drawingGuide'));
     document.getElementById('draw-building-btn').addEventListener('click', () => enterMode('drawingBuilding'));
+    // New Button Listener
+    document.getElementById('draw-linear-btn').addEventListener('click', () => enterMode('drawingLinearBuilding'));
+    
     document.getElementById('footprint-from-setbacks-btn').addEventListener('click', createFootprintFromSetbacks);
     document.getElementById('footprint-from-plot-btn').addEventListener('click', createFootprintFromPlot);
     document.getElementById('draw-parking-btn').addEventListener('click', () => enterMode('drawingParking'));
+    document.getElementById('draw-parking-on-edge-btn').addEventListener('click', () => enterMode('drawingParkingOnEdge'));
     document.getElementById('draw-bus-bay-btn').addEventListener('click', () => enterMode('drawingBusBay'));
     document.getElementById('draw-loading-bay-btn').addEventListener('click', () => enterMode('drawingLoadingBay'));
     document.getElementById('edit-setbacks-btn').addEventListener('click', () => enterMode('editingSetback'));
@@ -102,6 +110,12 @@ export function setupEventListeners() {
     document.getElementById('block-rotation').addEventListener('change', rotateSelectedObject);
     document.getElementById('block-width').addEventListener('change', () => updateBlockDimension('width'));
     document.getElementById('block-height').addEventListener('change', () => updateBlockDimension('height'));
+    
+    // Substation listeners
+    document.getElementById('substation-tcl').addEventListener('input', () => updateSubstationSize(state.canvas.getActiveObject()));
+    document.getElementById('substation-num-tx').addEventListener('input', () => updateSubstationSize(state.canvas.getActiveObject()));
+
+
     document.getElementById('place-composite-btn').addEventListener('click', placeSelectedComposite);
     document.getElementById('edit-composite-btn').addEventListener('click', editSelectedComposite);
     document.getElementById('new-composite-btn').addEventListener('click', openNewCompositeEditor);
@@ -128,6 +142,7 @@ export function setupEventListeners() {
     document.getElementById('export-pdf-btn').addEventListener('click', exportReportAsPDF);
     document.getElementById('generate3dBtn').addEventListener('click', generate3DBuilding);
     document.getElementById('exportScadBtn').addEventListener('click', generateOpenScadScript);
+    document.getElementById('align-core-btn').addEventListener('click', alignCoreElements);
     document.getElementById('previewLayoutBtn').addEventListener('click', handlePreviewLayout);
     document.getElementById('show-balconies-check').addEventListener('change', handlePreviewLayout);
     document.getElementById('show-corridor-check').addEventListener('change', handlePreviewLayout);
@@ -135,16 +150,61 @@ export function setupEventListeners() {
     document.getElementById('zoom-out-btn').addEventListener('click', () => zoomCanvas(1 / 1.2));
     document.getElementById('zoom-reset-btn').addEventListener('click', resetZoom);
     document.getElementById('pan-btn').addEventListener('click', () => enterMode('panning'));
+    document.getElementById('edit-group-btn').addEventListener('click', enterGroupEditMode);
+    document.getElementById('confirm-group-edit-btn').addEventListener('click', exitGroupEditMode);
+    
+    // NEW CSV LISTENERS
+    document.getElementById('export-blocks-csv-btn').addEventListener('click', exportServiceBlocksCSV);
+    document.getElementById('import-blocks-csv-upload').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            importServiceBlocksCSV(file, () => {
+                // Callback after import completes
+                renderServiceBlockList();
+                applyLevelVisibility();
+                state.canvas.renderAll();
+            });
+        }
+        e.target.value = ''; // Reset file input
+    });
+
+    document.getElementById('area-statement-btn').addEventListener('click', openAreaStatementModal);
+    document.getElementById('close-area-statement-btn').addEventListener('click', () => document.getElementById('area-statement-modal').style.display = 'none');
+    document.getElementById('save-area-statement-btn').addEventListener('click', saveAreaStatementChanges);
+    document.getElementById('reset-area-overrides-btn').addEventListener('click', resetAreaOverrides);
+    document.getElementById('add-manual-area-btn').addEventListener('click', addManualAreaEntry);
+    document.getElementById('select-tool-btn').addEventListener('click', () => exitAllModes());
+    document.getElementById('block-category-select').addEventListener('change', handleCategoryChange);
     window.addEventListener('keydown', e => {
         if (e.code === 'Space' && !state.currentMode && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)) {
             e.preventDefault(); enterMode('panning');
+        }
+        if (e.key === 'Escape' && window.activeVertex !== null) {
+            window.activeVertex = null;
+            state.canvas.requestRenderAll();
         }
     });
     window.addEventListener('keyup', e => {
         if (e.code === 'Space' && state.currentMode === 'panning') { exitAllModes(); }
     });
 }
+function handleBalconyClick(pointer) {
+    if (!state.currentApartmentLayout || !state.scale.ratio) return false;
 
+    for (const flat of state.currentApartmentLayout.placedFlats) {
+        if (!flat.type.balconyMultiplier || flat.type.balconyMultiplier <= 0) continue;
+
+        const balconyWidthPx = (flat.type.frontage / state.scale.ratio) * ((flat.type.balconyCoverage || 80) / 100);
+        const balconyDepthPx = flat.type.balconyMultiplier / state.scale.ratio;
+
+        if (isPointInRotatedRect(pointer, flat.balconyCenter, balconyWidthPx, balconyDepthPx, flat.angle)) {
+            flat.hasBalcony = !flat.hasBalcony;
+            state.canvas.requestRenderAll();
+            return true; // Click was handled
+        }
+    }
+    return false;
+}
 export function handleBlockTypeChange(e) {
     const key = e.target.options[e.target.selectedIndex]?.value;
     if(key && PREDEFINED_BLOCKS[key]?.level) {
@@ -165,7 +225,7 @@ export function placeServiceBlock(pointer) {
         const rect = new fabric.Rect({ width: blockWidth, height: blockHeight, fill: colors.fill, stroke: colors.stroke, strokeWidth: 2, originX: 'center', originY: 'center', strokeUniform: true });
         rect.setCoords();
         const label = new fabric.Text(blockId, { fontSize: Math.min(blockWidth, blockHeight) * 0.2, fill: '#fff', backgroundColor: 'rgba(0,0,0,0.4)', originX: 'center', originY: 'center' });
-         const lockIcon = new fabric.Text("🔒", { fontSize: 5, left:2, top:2, visible: true }); // Default Locked
+          const lockIcon = new fabric.Text("🔒", { fontSize: Math.min(blockWidth, blockHeight) * 0.2, left:Math.min(blockWidth, blockHeight) * 0.2, originY: 'center', visible: true }); // Default Locked
         const group = new fabric.Group([rect, label,lockIcon], {
             left: pointer.x, 
             top: pointer.y, 
@@ -208,7 +268,8 @@ export function createCompositeGroup(compositeData, pointer) {
 
         const subGroup = new fabric.Group([rect, label], {
             isServiceBlock: true, blockData, blockId: blockId, level: compositeLevel,
-            left: x_px + blockWidth / 2, top: y_px + blockHeight / 2
+            left: x_px + blockWidth / 2, top: y_px + blockHeight / 2,
+            selectable: false, evented: false
         });
         
         state.serviceBlocks.push(subGroup);
@@ -237,6 +298,15 @@ export function deleteSelectedFootprint() {
 export function deleteSelectedObject() {
     const selected = state.canvas.getActiveObject();
     if (!selected) return;
+     
+    // NEW: Handle sub-object deletion during group edit
+    if (window.isEditingGroup && window.groupBeingEdited && selected.isServiceBlock) {
+        const items = window.groupBeingEdited.getObjects();
+        const index = items.indexOf(selected);
+        if (index > -1) {
+            items.splice(index, 1);
+        }
+    }
     if (selected.isDxfOverlay) { deleteDxf(); return; }
     if (selected.isFootprint) { deleteSelectedFootprint(); return; }
     if (selected.isServiceBlock) state.serviceBlocks = state.serviceBlocks.filter(b => b !== selected);
@@ -282,22 +352,60 @@ function handleImportZIP(e) {
     const file = e.target.files[0];
     if (!file) return;
     importProjectZIP(file, state.canvas, () => {
-        // This callback runs after all assets are loaded from the zip
-        resetState (true); // true = keep objects that were just loaded
+        // This callback runs after all assets are loaded from the zip and enlivened.
+        // We now repopulate the application's state based on the restored objects.
+        resetState(true); // true = keep objects that were just loaded but clear state pointers
+
+        let maxId = 0;
         state.canvas.getObjects().forEach(obj => {
-            if (obj.isPlot) state.plotPolygon = obj;
-            else if (obj.isFootprint && obj.level && state.levels[obj.level]) state.levels[obj.level].objects.push(obj);
-            else if (obj.isServiceBlock || obj.isCompositeGroup) state.serviceBlocks.push(obj);
-            else if (obj.isParkingRow) state.parkingRows.push(obj);
-            else if (obj.isGuide) state.guideLines.push(obj);
-            else if (obj.isDxfOverlay) state.dxfOverlayGroup = obj;
+            // Restore Plot Polygon state
+            if (obj.isPlot) {
+                state.plotPolygon = obj;
+            }
+            // Restore Footprint Polygons state by adding them to the correct level
+            else if (obj.isFootprint && obj.level && state.levels[obj.level]) {
+                state.levels[obj.level].objects.push(obj);
+            }
+            // Restore Service Blocks state
+            else if (obj.isServiceBlock || obj.isCompositeGroup) {
+                state.serviceBlocks.push(obj);
+                // Find max service block ID to prevent future ID collisions
+                const blocksToCheck = obj.isServiceBlock ? [obj] : obj.getObjects();
+                blocksToCheck.forEach(subBlock => {
+                     if (subBlock.blockId && subBlock.blockId.startsWith('SB-')) {
+                        const idNum = parseInt(subBlock.blockId.split('-')[1]);
+                        if (!isNaN(idNum) && idNum > maxId) {
+                            maxId = idNum;
+                        }
+                    }
+                });
+            }
+            // Restore Parking Rows state
+            else if (obj.isParkingRow) {
+                state.parkingRows.push(obj);
+            }
+            // Restore Guide Lines state
+            else if (obj.isGuide) {
+                state.guideLines.push(obj);
+            }
+            // Restore DXF Overlay state
+            else if (obj.isDxfOverlay) {
+                state.dxfOverlayGroup = obj;
+            }
         });
+
+        // Update the global counter to the next available ID
+        state.serviceBlockCounter = maxId + 1;
+
         document.getElementById('status-bar').textContent = 'Project Imported Successfully.';
+        
+        // Refresh all UI components that depend on the restored state
         renderServiceBlockList();
         updateParkingDisplay();
         applyLevelVisibility();
         updateLevelFootprintInfo();
         updateUI();
+        updateDashboard();
     });
 }
 export async function handlePlanUpload(e) {
@@ -330,7 +438,9 @@ export async function handlePdfPageChange() {
     if (currentPdfData) {
         const pageNum = parseInt(document.getElementById('pdf-page').value) || 1;
         const img = await renderPdfToBackground(currentPdfData, pageNum);
-        setCanvasBackground(img);
+        if (img) {
+            setCanvasBackground(img);
+        }
     }
 }
 export function createFootprintFromSetbacks() {
@@ -387,6 +497,7 @@ export function  handleCalculate(isLiveUpdate = false, isDetailed = false) {
         state.lastCalculatedData = reportResult.data;
         document.getElementById('report-container').innerHTML = reportResult.html;
         updateParkingDisplay();
+         updateScreenshotGallery();
 
         // Attach event listeners to ALL expander elements
         const expanders = document.querySelectorAll('#report-container .expander');
@@ -417,6 +528,7 @@ export function  handlePreviewLayout(event) {
     const calcMode = document.getElementById('apartment-calc-mode').value;
     const balconyPlacement = document.getElementById('balcony-placement').value;
     const includeBalconiesInOffset = balconyPlacement === 'recessed';
+    const doubleLoaded = document.getElementById('double-loaded-corridor').checked;
 
     if (btn.classList.contains('active') && event?.target.id === 'previewLayoutBtn') {
         btn.textContent = 'Preview Layout';
@@ -439,9 +551,9 @@ export function  handlePreviewLayout(event) {
         return;
     }
 
-    const poly = polys[0]; 
+    const poly = polys[polys.length - 1]; // Use the last added footprint
     const counts = state.lastCalculatedData.aptCalcs.aptMixWithCounts.reduce((acc, apt) => ({ ...acc, [apt.key]: apt.countPerFloor }), {});
-    state.currentApartmentLayout = layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset, calcMode);
+    state.currentApartmentLayout = layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset, calcMode, doubleLoaded);
 
     btn.textContent = 'Hide Preview';
     btn.classList.add('active');
@@ -468,15 +580,17 @@ async function checkAndRescalePdf() {
             // Re-render the PDF with the new, higher resolution
             const newBgImage = await renderPdfToBackground(currentPdfData, pageNum, finalRenderingScale);
 
-            // Calculate a correction factor based on the change in pixel dimensions
-            const correctionFactor = newBgImage.width / bg.width;
+            if (newBgImage) {
+                // Calculate a correction factor based on the change in pixel dimensions
+                const correctionFactor = newBgImage.width / bg.width;
 
-            // Apply the new background image
-            setCanvasBackground(newBgImage);
-            
-            // IMPORTANT: Update the application's scale to match the new background resolution
-            const newPixelDistance = state.scale.pixelDistance * correctionFactor;
-            setScale(newPixelDistance, state.scale.realDistance);
+                // Apply the new background image
+                setCanvasBackground(newBgImage);
+                
+                // IMPORTANT: Update the application's scale to match the new background resolution
+                const newPixelDistance = state.scale.pixelDistance * correctionFactor;
+                setScale(newPixelDistance, state.scale.realDistance);
+            }
         }
     }
 }
@@ -485,6 +599,18 @@ async function checkAndRescalePdf() {
 export function handleMouseDown(o) {
     const pointer = state.canvas.getPointer(o.e);
 
+    if (state.currentMode === 'editingFootprint') {
+        // Prevent starting a drag on the main polygon body
+        if (o.target && o.target.isFootprint && !o.transform) {
+            return;
+        }
+    }
+
+    if (state.currentApartmentLayout && o.e.button === 0) { // Left click
+            if (handleBalconyClick(pointer)) {
+                return; // Prevent other mouse down actions if a balcony was clicked
+            }
+        }
     if (isMeasuring) {
         document.getElementById('status-bar').textContent='Start measuring';
         const snapPoint = findSnapPoint(pointer);
@@ -525,13 +651,20 @@ export function handleMouseDown(o) {
             const scaleData = finishScaling();
             if (scaleData) {
                 setScale(scaleData.pixels, scaleData.meters);
-                // After setting scale, check if the PDF background needs higher resolution
                 checkAndRescalePdf();
             } else {
                  document.getElementById('status-bar').textContent = "Invalid length provided. Please enter a number in the 'Known Distance' field.";
             }
             exitAllModes();
         }
+        return;
+    }
+       if (state.currentMode === 'drawingParkingOnEdge') {
+        const nearestEdge = findNearestParkingEdge(pointer);
+        if (nearestEdge) {
+            generateLinearParking(nearestEdge.p1, nearestEdge.p2);
+        }
+        exitAllModes();
         return;
     }
     if (state.currentMode === 'drawingLoadingBay') {
@@ -569,6 +702,22 @@ export function handleMouseDown(o) {
 }
 export function handleMouseMove(o) {
     let pointer = state.canvas.getPointer(o.e);
+
+    if (window.activeVertex !== null && state.currentMode === 'editingFootprint') {
+        const poly = state.canvas.getActiveObject();
+        if (poly && poly.isFootprint) {
+            const mouseLocalPosition = poly.toLocalPoint(new fabric.Point(pointer.x, pointer.y), 'center', 'center');
+            poly.points[window.activeVertex] = {
+                x: mouseLocalPosition.x + poly.pathOffset.x,
+                y: mouseLocalPosition.y + poly.pathOffset.y
+            };
+            const props = getPolygonProperties(poly);
+            document.getElementById('status-bar').textContent = `Editing... Area: ${f(props.area)} m² | Perimeter: ${f(props.perimeter, 1)} m`;
+            state.canvas.requestRenderAll();
+        }
+        return;
+    }
+
     if (state.currentMode === 'measuring') {
         document.getElementById('status-bar').textContent='Start measuring ..';
         if(measurePoint1) drawMeasurement(getOverlayContext(), measurePoint1, o.e);
@@ -579,6 +728,11 @@ export function handleMouseMove(o) {
     if (state.currentMode === 'aligningObject') {
         const targetEdge = getNearestEdge(pointer, state.plotPolygon, state.setbackGuides);
         updateAlignmentHighlight(targetEdge);
+        return;
+    }
+      if (state.currentMode === 'drawingParkingOnEdge') {
+        const nearestEdge = findNearestParkingEdge(pointer);
+        updateAlignmentHighlight(nearestEdge); // Reuse alignment highlighter
         return;
     }
     if (state.currentMode === 'editingSetback') {
@@ -601,8 +755,9 @@ export function  handleMouseUp(o) {
             stroke: guideLine.stroke, strokeWidth: guideLine.strokeWidth, strokeDashArray: guideLine.strokeDashArray,
             selectable: false, evented: false, isGuide: true, level: state.currentLevel, strokeUniform: true,
         });
-        state.canvas.add(finalGuide);
+        
         state.guideLines.push(finalGuide);
+        state.canvas.add(finalGuide);
         exitAllModes();
         return;
     }
@@ -621,6 +776,10 @@ export function  handleAfterRender() {
 export function  handleObjectModified(e) {
     const target = e.target;
     if (!target) return;
+        recordAction('OBJECT_MODIFIED', { 
+        object: target.toObject(['blockId', 'level', 'isFootprint']),
+        transform: target.calcTransformMatrix()
+    });
     clearEdgeSnapIndicator();
     if (target.isServiceBlock || target.isCompositeGroup) renderServiceBlockList();
     if (target.isParkingRow){ updateParkingDisplay(); }
@@ -629,17 +788,34 @@ export function  handleObjectModified(e) {
     }
     if (target.isFootprint && state.currentLevel === 'Typical_Floor' && state.projectType === 'Residential' && state.currentProgram) {
         const program = state.currentProgram;
-        const tempPerimeter = getPolygonProperties(target).perimeter;
+        
+        // Handle perimeter for both Polygon and Polyline (Linear)
+        let tempPerimeter = 0;
+        if (target.points) {
+            if (target.type === 'polyline') {
+                // Manually calc length for polyline
+                for (let i = 0; i < target.points.length - 1; i++) {
+                    const p1 = target.points[i];
+                    const p2 = target.points[i+1];
+                    tempPerimeter += Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                }
+                tempPerimeter *= state.scale.ratio; // Scale
+            } else {
+                tempPerimeter = getPolygonProperties(target).perimeter;
+            }
+        }
+
         const totalMix = program.unitTypes.reduce((sum, unit) => sum + unit.mix, 0) || 1;
         const avgFrontage = program.unitTypes.reduce((acc, unit) => acc + (unit.frontage * (unit.mix / totalMix)), 0);
         if (avgFrontage > 0) {
             const calcMode = document.getElementById('apartment-calc-mode').value;
             const balconyPlacement = document.getElementById('balcony-placement').value;
             const includeBalconiesInOffset = balconyPlacement === 'recessed';
+            const doubleLoaded = document.getElementById('double-loaded-corridor').checked;
 
             const estimatedUnits = Math.floor(tempPerimeter / avgFrontage);
             const counts = allocateCountsByPercent(estimatedUnits, program.unitTypes);
-            state.livePreviewLayout = layoutFlatsOnPolygon(target, counts, includeBalconiesInOffset, calcMode);
+            state.livePreviewLayout = layoutFlatsOnPolygon(target, counts, includeBalconiesInOffset, calcMode, doubleLoaded);
             updateParkingDisplay(counts);
         }
     }
@@ -719,7 +895,193 @@ export function  clearSetbackSelection() {
     state.selectedPlotEdges = [];
     clearEdgeHighlight();
 }
+function enterGroupEditMode() {
+    const group = state.canvas.getActiveObject();
+    if (!group || !group.isCompositeGroup) return;
 
+    window.isEditingGroup = true;
+    window.groupBeingEdited = group; // Store the original group
+    
+    // Explode the group into an active selection of its children
+    group.toActiveSelection();
+    // Discard the active selection to make items individually selectable
+    state.canvas.discardActiveObject();
+    
+    state.canvas.renderAll();
+    updateUI();
+    updateSelectedObjectControls(null);
+}
+function exitGroupEditMode() {
+    if (!window.isEditingGroup || !window.groupBeingEdited) return;
+
+    const originalGroup = window.groupBeingEdited;
+    
+    // Filter to get only the items that were part of the group AND are still on canvas
+    const originalItems = originalGroup.getObjects();
+    const itemsToGroup = originalItems.filter(item => state.canvas.getObjects().includes(item));
+
+
+    // Remove the individual items from the canvas before re-grouping
+    itemsToGroup.forEach(item => state.canvas.remove(item));
+
+    // Create a new group from the (potentially modified) items
+    const newGroup = new fabric.Group(itemsToGroup, {
+        left: originalGroup.left,
+        top: originalGroup.top,
+        angle: originalGroup.angle,
+        originX: 'center',
+        originY: 'center',
+        level: originalGroup.level,
+        isCompositeGroup: true
+    });
+
+    // Clean up and add the new group
+    state.canvas.add(newGroup);
+    window.isEditingGroup = false;
+    window.groupBeingEdited = null;
+    
+    state.canvas.setActiveObject(newGroup);
+    state.canvas.renderAll();
+    updateUI();
+}
+// NEW: Handle category change for selected block/group
+export function handleCategoryChange(e) {
+    const newCategory = e.target.value;
+    const activeObject = state.canvas.getActiveObject();
+    if (!activeObject || !(activeObject.isServiceBlock || activeObject.isCompositeGroup)) return;
+
+    const colors = BLOCK_CATEGORY_COLORS[newCategory];
+    if (!colors) return;
+
+    const updateObjectCategory = (obj) => {
+        if (obj.blockData) {
+            obj.blockData.category = newCategory;
+        }
+        const rect = obj._objects ? obj._objects[0] : null; // Access rect inside group
+        if (rect) {
+            rect.set({ fill: colors.fill, stroke: colors.stroke });
+        }
+    };
+
+    if (activeObject.isCompositeGroup) {
+        activeObject.forEachObject(subObj => {
+            updateObjectCategory(subObj);
+        });
+    } else { // isServiceBlock
+        updateObjectCategory(activeObject);
+    }
+    
+    recordAction('CHANGE_CATEGORY', { objectId: activeObject.blockId, newCategory });
+    state.canvas.renderAll();
+    renderServiceBlockList();
+    handleCalculate(true); // Recalculate areas
+}
+
+
+// NEW: Handlers for editable area statement
+function saveAreaStatementChanges() {
+    const form = document.getElementById('area-statement-form');
+    form.querySelectorAll('input[type="number"]').forEach(input => {
+        const { level, type } = input.dataset;
+        const value = parseFloat(input.value);
+        if (!isNaN(value)) {
+            if (!state.manualAreaOverrides[level]) {
+                state.manualAreaOverrides[level] = {};
+            }
+            state.manualAreaOverrides[level][type] = value;
+        }
+    });
+    recordAction('SAVE_AREA_OVERRIDES', { overrides: state.manualAreaOverrides });
+    document.getElementById('area-statement-modal').style.display = 'none';
+    handleCalculate(true); // Force a live update of the report
+}
+
+function resetAreaOverrides() {
+    if (confirm('Are you sure you want to remove all manual area overrides?')) {
+        state.manualAreaOverrides = {};
+        recordAction('RESET_AREA_OVERRIDES', {});
+        openAreaStatementModal(); // Re-open/refresh the modal to show calculated values
+        handleCalculate(true);
+    }
+}
+
+function addManualAreaEntry() {
+    const level = document.getElementById('manual-area-level').value;
+    const type = document.getElementById('manual-area-type').value;
+    const value = parseFloat(document.getElementById('manual-area-value').value);
+
+    if (level && type && !isNaN(value)) {
+        if (!state.manualAreaOverrides[level]) {
+            state.manualAreaOverrides[level] = {};
+        }
+        state.manualAreaOverrides[level][type] = value;
+        openAreaStatementModal(); // Refresh modal to show the new entry
+    } else {
+        alert('Please fill all fields for the manual entry.');
+    }
+}
+
+export function alignCoreElements() {
+    const referenceLevel = 'Typical_Floor';
+
+    const getCoreBlocks = (level) => {
+        return state.serviceBlocks.filter(b => 
+            b.level === level && 
+            b.blockData && 
+            (b.blockData.name.toLowerCase().includes('lift') || b.blockData.role === 'staircase')
+        );
+    };
+    
+    const referenceCoreBlocks = getCoreBlocks(referenceLevel);
+    const referenceStair = referenceCoreBlocks.find(b => b.blockData.role === 'staircase');
+
+    if (!referenceStair) {
+        document.getElementById('status-bar').textContent = `No 'staircase' block found on the reference level '${referenceLevel.replace(/_/g, ' ')}' to align to.`;
+        return;
+    }
+    
+    const refPoint = referenceStair.getCenterPoint();
+    const refAngle = referenceStair.angle;
+    let alignedLevels = 0;
+
+    LEVEL_ORDER.forEach(levelKey => {
+        if (levelKey === referenceLevel) return;
+
+        const levelCoreBlocks = getCoreBlocks(levelKey);
+        if (levelCoreBlocks.length === 0) return;
+
+        const levelStair = levelCoreBlocks.find(b => b.blockData.role === 'staircase');
+        if (!levelStair) return;
+
+        const levelPoint = levelStair.getCenterPoint();
+        const levelAngle = levelStair.angle;
+
+        const dx = refPoint.x - levelPoint.x;
+        const dy = refPoint.y - levelPoint.y;
+        const dAngle = refAngle - levelAngle;
+
+        if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1 && Math.abs(dAngle) < 0.1) return;
+
+        // Apply the same transformation to all core blocks on this level
+        levelCoreBlocks.forEach(block => {
+            block.set({
+                left: block.left + dx,
+                top: block.top + dy,
+                angle: block.angle + dAngle
+            });
+            block.setCoords();
+        });
+        alignedLevels++;
+    });
+
+    if (alignedLevels > 0) {
+        state.canvas.renderAll();
+        recordAction('ALIGN_CORE', { referenceLevel });
+        document.getElementById('status-bar').textContent = `Successfully aligned cores on ${alignedLevels} level(s).`;
+    } else {
+        document.getElementById('status-bar').textContent = 'All cores are already aligned.';
+    }
+}
 // --- Mode Entry/Exit ---
 export function enterMode(mode, data = null) {
     if (state.currentMode === 'editingFootprint') {
@@ -730,17 +1092,22 @@ export function enterMode(mode, data = null) {
     state.canvas.selection = false;
     state.canvas.discardActiveObject().renderAll();
 
-    if (mode === 'drawingBuilding' && state.plotPolygon) drawSetbackGuides();
+    if ((mode === 'drawingBuilding' || mode === 'drawingLinearBuilding') && state.plotPolygon) drawSetbackGuides();
     if (mode === 'placingCompositeBlock') selectedCompositeBlockData = data;
+     if (mode === 'drawingParkingOnEdge') {
+        document.getElementById('status-bar').textContent = 'Select a building edge on a valid level (Basement, Ground, Podium) to place parking.';
+    }
     if (mode === 'editingSetback') document.getElementById('individual-setback-controls').style.display = 'block';
     if (mode === 'editingFootprint') {
-        const footprints = state.levels[state.currentLevel]?.objects;
-        if (footprints && footprints.length > 0) {
-            const footprintToEdit = footprints[0]; // Simple: edit the first one
+        const selected = state.canvas.getActiveObject();
+        const footprintToEdit = (selected && selected.isFootprint) ? selected : state.levels[state.currentLevel]?.objects.find(o => o.isFootprint);
+        
+        if (footprintToEdit) {
             makeFootprintEditable(footprintToEdit);
             state.canvas.setActiveObject(footprintToEdit);
             state.canvas.renderAll();
         } else {
+            document.getElementById('status-bar').textContent = 'No footprint on this level to edit. Please select one or draw one.';
             exitAllModes();
         }
     }
@@ -808,75 +1175,47 @@ export function  confirmFootprintEdit() {
     state.canvas.discardActiveObject().renderAll();
     exitAllModes();
 }
-export function  makeFootprintEditable(polygon) {
-    if (!polygon || !polygon.points) return;
-    polygon.originalControls = polygon.controls;
-    polygon.controls = {};
-    polygon.set({ hasControls: true, cornerColor: 'rgba(255,0,0,0.7)', cornerStyle: 'circle', transparentCorners: false, cornerSize: 12, lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, });
 
-    polygon.points.forEach((point, index) => {
-        polygon.controls['p' + index] = new fabric.Control({
-            positionHandler: (dim, finalMatrix, fabricObject) => fabric.util.transformPoint(fabricObject.points[index], fabricObject.calcTransformMatrix()),
-            actionHandler: (eventData, transform, x, y) => {
-                const poly = transform.target;
-                const mouseLocalPosition = fabric.util.transformPoint({ x: x, y: y }, fabric.util.invertTransform(poly.calcTransformMatrix()));
-                poly.points[index].x = mouseLocalPosition.x;
-                poly.points[index].y = mouseLocalPosition.y;
-                return true;
-            },
-            actionName: 'modifyPolygon',
-            render: (ctx, left, top, styleOverride, fabricObject) => {
-                ctx.save(); ctx.translate(left, top); ctx.fillStyle = 'rgba(0,0,255,0.7)'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, 2 * Math.PI, false); ctx.fill(); ctx.restore();
-            },
-        });
-    });
-
-    polygon.on('modified', () => {
-        const { min, max } = fabric.util.getBoundsOfPoints(polygon.points);
-        polygon.set({
-            pathOffset: { x: min.x + (max.x - min.x) / 2, y: min.y + (max.y - min.y) / 2 },
-            width: max.x - min.x, height: max.y - min.y,
-        }).setCoords();
-        handleObjectModified({ target: polygon });
-    });
-    polygon.setCoords();
-}
-export function  makeFootprintUneditable(polygon) {
-    if (!polygon) return;
-    polygon.controls = polygon.originalControls || fabric.Object.prototype.controls;
-    polygon.off('modified');
-    polygon.set({ hasControls: false, selectable: false, evented: false, stroke: 'red', lockMovementX: false, lockMovementY: false, lockScalingX: false, lockScalingY: false, lockRotation: false, }).setCoords();
-    state.canvas.renderAll();
-}
-
-export function  handleFinishPolygon(polygon, modeOverride = null) {
+export function  handleFinishPolygon(shape, modeOverride = null) {
     state.livePreviewLayout = null;
     const currentMode = modeOverride || state.currentMode;
+    
+    recordAction('FINISH_POLYGON', { shape: shape.toObject(), mode: currentMode, level: state.currentLevel });
+
+    const isClosed = shape.type === 'polygon';
+
     if (currentMode === 'drawingPlot') {
         if (state.plotPolygon) state.canvas.remove(state.plotPolygon);
-        state.plotPolygon = polygon;
-        polygon.set({ fill: 'rgba(0, 0, 255, 0.1)', stroke: 'rgba(0, 0, 255, 0.6)', strokeWidth: 1.5, level: 'Plot', selectable: false, evented: false, isPlot: true, strokeUniform: true });
-        state.plotEdgeProperties = polygon.points.map(() => ({ distance: 5, direction: 'inside' }));
-    } else if (currentMode === 'drawingBuilding') {
+        state.plotPolygon = shape;
+        shape.set({ fill: 'rgba(0, 0, 255, 0.1)', stroke: 'rgba(0, 0, 255, 0.6)', strokeWidth: 1.5, level: 'Plot', selectable: false, evented: false, isPlot: true, strokeUniform: true });
+        state.plotEdgeProperties = shape.points.map(() => ({ distance: 5, direction: 'inside' }));
+    } else if (currentMode === 'drawingBuilding' || currentMode === 'drawingLinearBuilding') {
         const levelData = state.levels[state.currentLevel];
-        polygon.set({ fill: levelData.color, stroke: 'red', level: state.currentLevel, selectable: false, evented: false, isFootprint: true, strokeUniform: true });
-        levelData.objects.push(polygon);
+        
+        if(!isClosed) {
+             shape.set({ fill: 'transparent', stroke: 'red', strokeWidth: 3 });
+        } else {
+             shape.set({ fill: levelData.color, stroke: 'red' });
+        }
+
+        shape.set({ level: state.currentLevel, selectable: false, evented: false, isFootprint: true, strokeUniform: true });
+        levelData.objects.push(shape);
         updateLevelFootprintInfo();
         
-        if (document.getElementById('auto-place-core-check').checked) {
+        if (isClosed && document.getElementById('auto-place-core-check').checked) {
             const coreForLevel = state.userCompositeBlocks.find(core => core.level === state.currentLevel || core.name.toLowerCase().includes(state.currentLevel.toLowerCase().replace('_', ' ')));
             if (coreForLevel) {
                 const coreIndex = state.userCompositeBlocks.indexOf(coreForLevel);
                 document.getElementById('composite-block-select').value = coreIndex;
-                createCompositeGroup(coreForLevel, polygon.getCenterPoint());
+                createCompositeGroup(coreForLevel, shape.getCenterPoint());
             } else {
                 const selectedIndex = document.getElementById('composite-block-select').value;
                 const selectedData = state.userCompositeBlocks[selectedIndex];
-                if (selectedData) { createCompositeGroup(selectedData, polygon.getCenterPoint()); }
+                if (selectedData) { createCompositeGroup(selectedData, shape.getCenterPoint()); }
             }
         }
     }
-    state.canvas.add(polygon);
+    state.canvas.add(shape);
     state.canvas.renderAll();
     exitAllModes();
 }

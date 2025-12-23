@@ -1,4 +1,3 @@
-
 window.objectToAlign = null;
 window.currentLevelOp = { mode: null, object: null };
 window.currentlyEditingCompositeIndex = -1;
@@ -20,7 +19,8 @@ window.parkingLine = null;
 window.selectedCompositeBlockData = null;
 
 window.edgeSnapIndicator = null;
-
+window.isEditingGroup = false;
+window.groupBeingEdited = null;
 window.snapThreshold = 15; // Pixels for snapping
 
 window.measurePoint1 = null;
@@ -45,6 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
     init3D();
     initUI();
     setupEventListeners();
-    resetState();
-    updateUI();
+resetState();
+updateUI();
 });

@@ -1,4 +1,3 @@
-// --- START OF FILE utils.js ---
 import { state } from './state.js';
 
 export function f(val, dec = 2) {
@@ -7,6 +6,18 @@ export function f(val, dec = 2) {
 export function fInt(val) {
     return val != null && !isNaN(val) ? val.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0';
 }
+export function isPointInRotatedRect(point, center, width, height, angle) {
+    const cos = Math.cos(-angle);
+    const sin = Math.sin(-angle);
+
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+
+    const rotatedX = dx * cos - dy * sin;
+    const rotatedY = dx * sin + dy * cos;
+
+    return Math.abs(rotatedX) <= width / 2 && Math.abs(rotatedY) <= height / 2;
+}
 export function getLineIntersection(p1, p2, p3, p4) {
     const d = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
     if (d === 0) return null;
@@ -14,16 +25,29 @@ export function getLineIntersection(p1, p2, p3, p4) {
     return { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) };
 }
 export function getPolygonProperties(fabricPolygon) {
-    if (!fabricPolygon || !fabricPolygon.points || fabricPolygon.points.length < 3 || state.scale.ratio === 0) {
+    if (!fabricPolygon || !fabricPolygon.points || fabricPolygon.points.length < 2 || state.scale.ratio === 0) {
         return { area: 0, perimeter: 0 };
     }
     const meterPoints = fabricPolygon.points.map(p => ({ x: p.x * state.scale.ratio, y: p.y * state.scale.ratio }));
     let area = 0, perimeter = 0;
-    for (let i = 0, j = meterPoints.length - 1; i < meterPoints.length; j = i++) {
-        area += (meterPoints[j].x + meterPoints[i].x) * (meterPoints[j].y - meterPoints[i].y);
-        perimeter += Math.hypot(meterPoints[i].x - meterPoints[j].x, meterPoints[i].y - meterPoints[j].y);
+    
+    // Closed Polygon Logic
+    if (fabricPolygon.type === 'polygon') {
+        for (let i = 0; i < meterPoints.length; i++) {
+            const j = (i + 1) % meterPoints.length;
+            area += (meterPoints[j].x + meterPoints[i].x) * (meterPoints[j].y - meterPoints[i].y);
+            perimeter += Math.hypot(meterPoints[i].x - meterPoints[j].x, meterPoints[i].y - meterPoints[j].y);
+        }
+        area = Math.abs(area / 2);
+    } else {
+        // Polyline (Linear) Logic
+        for (let i = 0; i < meterPoints.length - 1; i++) {
+            perimeter += Math.hypot(meterPoints[i+1].x - meterPoints[i].x, meterPoints[i+1].y - meterPoints[i].y);
+        }
+        area = 0; 
     }
-    return { area: Math.abs(area / 2), perimeter: perimeter };
+    
+    return { area: area, perimeter: perimeter };
 }
 export function getPolygonAreaFromPoints(points) {
     if (!points || points.length < 3 || state.scale.ratio === 0) return 0;
@@ -115,8 +139,8 @@ export function allocateCountsByPercent(n, types) {
     }
     return counts;
 }
-export function getOffsetPolygon(points, offset) {
-    if (!points || points.length < 3) return [];
+export function getOffsetPolygon(points, offset, isClosed = true) {
+    if (!points || points.length < 2) return [];
 
     const centroid = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
     centroid.x /= points.length;
@@ -124,8 +148,11 @@ export function getOffsetPolygon(points, offset) {
 
     const num = points.length;
     const offsetLines = [];
+    
+    // For closed poly, loop last to first. For open, stop at length - 1.
+    const loopLimit = isClosed ? num : num - 1;
 
-    for (let i = 0; i < num; i++) {
+    for (let i = 0; i < loopLimit; i++) {
         const p1 = points[i];
         const p2 = points[(i + 1) % num];
         const dx = p2.x - p1.x;
@@ -157,30 +184,44 @@ export function getOffsetPolygon(points, offset) {
     }
 
     const newPoints = [];
-    for (let i = 0; i < num; i++) {
+    // Reconstruct intersections
+    for (let i = 0; i < offsetLines.length; i++) {
         const lineA = offsetLines[i];
-        const lineB = offsetLines[(i + 1) % num];
-        if (!lineA || !lineB) {
-            const orig = points[(i + 1) % num];
-            const vx = centroid.x - orig.x;
-            const vy = centroid.y - orig.y;
-            const vlen = Math.hypot(vx, vy) || 1;
-            newPoints.push({
-                x: orig.x + (vx / vlen) * Math.abs(offset),
-                y: orig.y + (vy / vlen) * Math.abs(offset)
-            });
-            continue;
-        }
+        if(!lineA) continue; 
 
-        const inter = getLineIntersection(lineA.p1, lineA.p2, lineB.p1, lineB.p2);
-        if (inter) {
-            newPoints.push(inter);
+        if (!isClosed) {
+            // Linear case handling
+            if (i === 0) {
+                newPoints.push(lineA.p1); // Start of first segment
+            }
+            if (i < offsetLines.length - 1) {
+                const lineB = offsetLines[i+1];
+                if(lineB) {
+                    const inter = getLineIntersection(lineA.p1, lineA.p2, lineB.p1, lineB.p2);
+                    if (inter) newPoints.push(inter);
+                    else newPoints.push(lineA.p2);
+                }
+            } else {
+                newPoints.push(lineA.p2); // End of last segment
+            }
         } else {
-            newPoints.push({ x: lineA.p2.x, y: lineA.p2.y });
+            // Closed polygon case
+            const nextIdx = (i + 1) % offsetLines.length;
+            const lineB = offsetLines[nextIdx];
+            if (!lineB) {
+                newPoints.push(lineA.p2); 
+                continue;
+            }
+            const inter = getLineIntersection(lineA.p1, lineA.p2, lineB.p1, lineB.p2);
+            if (inter) {
+                newPoints.push(inter);
+            } else {
+                newPoints.push({ x: lineA.p2.x, y: lineA.p2.y });
+            }
         }
     }
 
-    if (newPoints.length < 3) return [];
+    if (newPoints.length < 2) return [];
     return newPoints;
 }
 export function pointToLineSegmentDistance(p, v, w) {
@@ -203,4 +244,92 @@ export function ensureCounterClockwise(points) {
         return [...points].reverse();
     }
     return points;
+}
+
+// --- OBB ALGORITHMS (from ai_studio_code (28).html) ---
+
+function crossProduct(p1, p2, p3) {
+    return (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+}
+
+export function getConvexHull(points) {
+    if (points.length < 3) return [...points];
+    
+    const sortedPoints = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+
+    const lower = [];
+    for (const p of sortedPoints) {
+        while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+            lower.pop();
+        }
+        lower.push(p);
+    }
+
+    const upper = [];
+    for (let i = sortedPoints.length - 1; i >= 0; i--) {
+        const p = sortedPoints[i];
+        while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+            upper.pop();
+        }
+        upper.push(p);
+    }
+
+    upper.pop();
+    lower.pop();
+    
+    return lower.concat(upper);
+}
+
+export function getOBB(points) {
+    if (!points || points.length < 2) return null;
+    
+    const hull = getConvexHull(points);
+
+    if (hull.length < 2) {
+        const p = hull[0] || points[0];
+        return { angle: 0, corners: [p, p, p, p], width: 0, height: 0 };
+    }
+    
+    let minArea = Infinity;
+    let bestOBB = null;
+
+    for (let i = 0; i < hull.length; i++) {
+        const p1 = hull[i];
+        const p2 = hull[(i + 1) % hull.length];
+        
+        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+
+        const rotatedHull = hull.map(p => {
+            const dx = p.x;
+            const dy = p.y;
+            return {
+                x: dx * Math.cos(-angle) - dy * Math.sin(-angle),
+                y: dx * Math.sin(-angle) + dy * Math.cos(-angle)
+            };
+        });
+
+        const aabb = getPolygonBoundingBox(rotatedHull);
+        const area = aabb.width * aabb.height;
+        
+        if (area < minArea) {
+            minArea = area;
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            
+            const corners = [
+                { x: aabb.x, y: aabb.y },
+                { x: aabb.x + aabb.width, y: aabb.y },
+                { x: aabb.x + aabb.width, y: aabb.y + aabb.height },
+                { x: aabb.x, y: aabb.y + aabb.height }
+            ].map(p => ({
+                x: p.x * cos - p.y * sin,
+                y: p.x * sin + p.y * cos
+            }));
+
+            bestOBB = {
+                angle: angle, corners: corners, width: aabb.width, height: aabb.height
+            };
+        }
+    }
+    return bestOBB;
 }

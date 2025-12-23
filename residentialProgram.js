@@ -1,3 +1,4 @@
+
 // --- START OF FILE residentialProgram.js ---
 function calculateUnitDimensions(unit) {
     if (!unit.layout || unit.layout.length === 0) {

@@ -1,3 +1,5 @@
+//--- START OF FILE config.js ---
+
 // MODULE 1: CONFIG & PROGRAM DATA (config.js equivalent)
 // =====================================================================
 import { VILLA_PROGRAM } from './villaProgram.js';
@@ -19,6 +21,7 @@ export const LEVEL_DEFINITIONS = {
     'Basement': { objects: [], color: 'rgba(128, 128, 128, 0.4)', countKey: 'numBasements' },
     'Basement_Last': { objects: [], color: 'rgba(100, 100, 100, 0.4)', countKey: null },
     'Ground_Floor': { objects: [], color: 'rgba(156, 39, 176, 0.4)', countKey: null },
+    'Mezzanine': { objects: [], color: 'rgba(126, 87, 194, 0.4)', countKey: 'numMezzanines' },
     'Retail': { objects: [], color: 'rgba(255, 152, 0, 0.8)', countKey: null },
     'Supermarket': { objects: [], color: 'rgba(205, 220, 57, 0.4)', countKey: null },
     'Podium': { objects: [], color: 'rgba(76, 175, 80, 0.4)', countKey: 'numPodiums' },
@@ -30,11 +33,11 @@ export const LEVEL_DEFINITIONS = {
     'Roof': { objects: [], color: 'rgba(63, 81, 181, 0.4)', countKey: null }
 };
 export const LEVEL_ORDER = [
-    'Basement', 'Basement_Last', 'Ground_Floor', 'Retail', 'Supermarket', 
+    'Basement', 'Basement_Last', 'Ground_Floor', 'Mezzanine', 'Retail', 'Supermarket', 
     'Podium', 'Podium_Last', 'Office', 'Commercial', 'Typical_Floor', 'Hotel', 'Roof'
 ];
 export const LEVEL_HEIGHTS = {
-    Basement: 3.5, Basement_Last: 3.5, Ground_Floor: 8.5, Retail: 4.5, Supermarket: 5.0,
+    Basement: 3.5, Basement_Last: 3.5, Ground_Floor: 8.5, Mezzanine: 3.0, Retail: 4.5, Supermarket: 5.0,
     Podium: 3.2, Podium_Last: 3.5, Office: 3.5, Commercial: 4.0, Typical_Floor: 3.5, Hotel: 3.5, Roof: 1.0, default: 3.5
 };
 export const BLOCK_CATEGORY_COLORS = {
@@ -97,6 +100,21 @@ export const RESIDENTIAL_PROGRAM = {
     liftOccupancyRanges: [0, 201, 301, 401, 501, 601, 701, 801, 901, 1001],
     liftMatrix: [[1,5,1,1,2,2,0,0,0,0,0,0],[6,10,2,2,2,2,3,3,3,0,0,0],[11,15,2,2,2,3,3,3,4,4,4,5],[16,20,2,2,3,3,3,4,4,4,5,5],[21,25,2,3,3,3,4,4,4,5,5,6],[26,30,3,3,3,3,4,4,5,5,5,6],[31,35,3,3,3,4,4,5,5,5,6,6]],
     calculateLifts: function(totalOccupancyLoad, numFloors) { if (numFloors <= 0 || totalOccupancyLoad <= 0) return 0; let floorConfigRow = this.liftMatrix.find(row => numFloors >= row[0] && numFloors <= row[1]); if (!floorConfigRow) { floorConfigRow = this.liftMatrix[this.liftMatrix.length - 1]; } let occupancyColIndex = 0; for (let i = this.liftOccupancyRanges.length - 1; i >= 0; i--) { if (totalOccupancyLoad >= this.liftOccupancyRanges[i]) { occupancyColIndex = i; break; } } const liftCountIndex = occupancyColIndex + 2; return floorConfigRow[liftCountIndex] || floorConfigRow[floorConfigRow.length - 1]; },
+    
+    // NEW: Staircase requirement data from PDF
+    staircaseOccupancyRules: [
+        { min: 0, max: 499, exits: 2 },
+        { min: 500, max: 1000, exits: 3 },
+        { min: 1001, max: Infinity, exits: 4 }
+    ],
+    calculateStaircases: function(totalOccupancyLoad) {
+        if (totalOccupancyLoad <= 0) return 2; // Baseline for any building
+        const rule = this.staircaseOccupancyRules.find(range => 
+            totalOccupancyLoad >= range.min && totalOccupancyLoad <= range.max
+        );
+        return rule ? rule.exits : 2; // Default to 2 if something goes wrong
+    },
+    
     calculateUnitDimensions,
 };
 RESIDENTIAL_PROGRAM.unitTypes.forEach(calculateUnitDimensions);
@@ -134,59 +152,72 @@ export const PROJECT_PROGRAMS = {
 };
 
 export const AREA_STATEMENT_DATA = [
-    { name: "Comm. Staircase (Basement)", level: "Basement", type: "gfa", w: 6, h: 3 },
-    { name: "Corridor (Basement)", level: "Basement", type: "gfa", w: 2.4, h: 2.4 },
-    { name: "Lift (Basement)", level: "Basement", type: "gfa", w: 2.4, h: 2.4 },
-    { name: "Pump Room for ETS", level: "Basement", type: "service", w: 5, h: 5 },
-    { name: "Water Tank", level: "Basement", type: "service", w: 3, h: 10 },
-    { name: "BTU Meter Room", level: "Ground_Floor", type: "service", w: 2.5, h: 2.5 },
-    { name: "Comm_Staircase_GF", level: "Ground_Floor", type: "gfa", w: 6, h: 3 },
-    { name: "Control Room", level: "Ground_Floor", type: "service", w: 19, h: 1 },
-    { name: "Corridor (GF)", level: "Ground_Floor", type: "gfa", w: 6.5, h: 1.8 },
-    { name: "ETS Room", level: "Ground_Floor", type: "service", w: 9, h: 9 },
-    { name: "Electrical Room", level: "Ground_Floor", type: "service", w: 3, h: 3 },
-    { name: "Entrance Lobby", level: "Ground_Floor", type: "gfa", w: 8, h: 12 },
-    { name: "GSM Room", level: "Ground_Floor", type: "service", w: 3, h: 3 },
-    { name: "Garbage Room", level: "Ground_Floor", type: "service", w: 8, h: 1 },
-    { name: "Generator Room", level: "Ground_Floor", type: "service", w: 7, h: 8 },
-    { name: "LV Room", level: "Ground_Floor", type: "service", w: 5.1, h: 8.6 },
-    { name: "Lift (GF)", level: "Ground_Floor", type: "gfa", w: 2.4, h: 2.4 },
-    { name: "Lift Corridor (GF)", level: "Ground_Floor", type: "gfa", w: 10, h: 2.4 },
-    { name: "Pump Room", level: "Ground_Floor", type: "service", w: 8.5, h: 8 },
-    { name: "RMU Room", level: "Ground_Floor", type: "service", w: 3, h: 3.2 },
-    { name: "Substation", level: "Ground_Floor", type: "service", w: 5.1, h: 10.5 },
-    { name: "Telephone Room", level: "Ground_Floor", type: "service", w: 5.1, h: 4 },
-    { name: "Restaurant", level: "Ground_Floor", type: "gfa", w: 15, h: 10, projectTypes: ['Hotel'] },
-    { name: "Ballroom", level: "Ground_Floor", type: "gfa", w: 30, h: 20, projectTypes: ['Hotel'] },
-    { name: "Meeting Room", level: "Podium", type: "gfa", w: 10, h: 8, projectTypes: ['Hotel'] },
-    { name: "Swimming Pool", level: "Podium", type: "builtup", w: 15, h: 7 },
-    { name: "Comm_Staircase_Podium", level: "Podium", type: "gfa", w: 6, h: 3 },
-    { name: "Corridor (Podium)", level: "Podium", type: "gfa", w: 12.8, h: 2.4 },
-    { name: "Electrical Room (Podium)", level: "Podium", type: "service", w: 4, h: 3.5 },
-    { name: "Lift (Podium)", level: "Podium", type: "gfa", w: 2.4, h: 2.4 },
-    { name: "Water Meter (Podium)", level: "Podium", type: "service", w: 1.7, h: 1.7 },
-    { name: "Comm. Corridor (Typical)", level: "Typical_Floor", type: "gfa", w: 21, h: 1.8 },
-    { name: "Comm. Electrical Room", level: "Typical_Floor", type: "service", w: 10, h: 1 },
-    { name: "Comm. Garbage Chute", level: "Typical_Floor", type: "service", w: 2.7, h: 1.5 },
-    { name: "Comm. Lift Corridor", level: "Typical_Floor", type: "gfa", w: 6.6, h: 2.4 },
-    { name: "Comm_Staircase_Typical", level: "Typical_Floor", type: "gfa", w: 6, h: 3 },
-    { name: "Comm. Tele Room", level: "Typical_Floor", type: "service", w: 2.4, h: 3.5 },
-    { name: "Comm. Water Meter", level: "Typical_Floor", type: "service", w: 1.7, h: 1.7 },
-    { name: "Comm. Water Meter", level: "Typical_Floor", type: "service", w: 4, h: 1 },
-    { name: "Lift_Typical", level: "Typical_Floor", type: "gfa", w: 2.4, h: 2.4},
-    { name: "Shaft", level: "Typical_Floor", type: "service", w: 2.0, h: 2.0},
-    { name: "Comm. Gym", level: "Roof", type: "service", w: 583, h: 1 },
-    { name: "Comm. Service (Roof)", level: "Roof", type: "service", w: 124, h: 1 },
-    { name: "Comm_Staircase_Roof", level: "Roof", type: "gfa", w: 6, h: 3 },
-    { name: "Corridor (Roof)", level: "Roof", type: "gfa", w: 6.6, h: 2.4 },
-    { name: "Lift (Roof)", level: "Roof", type: "gfa", w: 2.4, h: 2.4 },
-    { name: "Terrace Area", level: "Roof", type: "builtup", w: 0.5, h: 1166 }
+    { name: "Comm. Staircase (Basement)", key: "Comm_Staircase_Basement_6_3", level: "Basement", type: "gfa", w: 6, h: 3, role: 'staircase' },
+    { name: "Corridor (Basement)", key: "Corridor_Basement_2.4_2.4", level: "Basement", type: "gfa", w: 2.4, h: 2.4 },
+    { name: "Lift (Basement)", key: "Lift_Basement_2.4_2.4", level: "Basement", type: "gfa", w: 2.4, h: 2.4 },
+    { name: "Pump Room for ETS", key: "Pump_Room_for_ETS_5_5", level: "Basement", type: "service", w: 5, h: 5 },
+    { name: "Water Tank", key: "Water_Tank_3_10", level: "Basement", type: "service", w: 3, h: 10 },
+    { name: "BTU Meter Room", key: "BTU_Meter_Room_2.5_2.5", level: "Ground_Floor", type: "service", w: 2.5, h: 2.5 },
+    { name: "Comm_Staircase_GF", key: "Comm_Staircase_GF_6_3", level: "Ground_Floor", type: "gfa", w: 6, h: 3, role: 'staircase' },
+    { name: "Control Room", key: "Control_Room_19_1", level: "Ground_Floor", type: "service", w: 19, h: 1 },
+    { name: "Corridor (GF)", key: "Corridor_GF_6.5_1.8", level: "Ground_Floor", type: "gfa", w: 6.5, h: 1.8 },
+    { name: "ETS Room", key: "ETS_Room_9_9", level: "Ground_Floor", type: "service", w: 9, h: 9 },
+    { name: "Electrical Room", key: "Electrical_Room_3_3", level: "Ground_Floor", type: "service", w: 3, h: 3 },
+    { name: "Entrance Lobby", key: "Entrance_Lobby_8_12", level: "Ground_Floor", type: "gfa", w: 8, h: 12 },
+    { name: "GSM Room", key: "GSM_Room_3_3", level: "Ground_Floor", type: "service", w: 3, h: 3 },
+    { name: "Garbage Room", key: "Garbage_Room_8_1", level: "Ground_Floor", type: "service", w: 8, h: 1 },
+    { name: "Generator Room", key: "Generator_Room_7_8", level: "Ground_Floor", type: "service", w: 7, h: 8 },
+    { name: "LV Room", key: "LV_Room_5.1_8.6", level: "Ground_Floor", type: "service", w: 5.1, h: 8.6 },
+    { name: "Lift (GF)", key: "Lift_GF_2.4_2.4", level: "Ground_Floor", type: "gfa", w: 2.4, h: 2.4 },
+    { name: "Lift Corridor (GF)", key: "Lift_Corridor_GF_10_2.4", level: "Ground_Floor", type: "gfa", w: 10, h: 2.4 },
+    { name: "Pump Room", key: "Pump_Room_8.5_8", level: "Ground_Floor", type: "service", w: 8.5, h: 8 },
+    { name: "RMU Room", key: "RMU_Room_3_3.2", level: "Ground_Floor", type: "service", w: 3, h: 3.2 },
+    { name: "Substation", key: "Substation_6.5_5", level: "Ground_Floor", type: "service", w: 6.5, h: 5, role: 'substation', tcl: 1500, numTx: 1 },
+    { name: "Telephone Room", key: "Telephone_Room_5.1_4", level: "Ground_Floor", type: "service", w: 5.1, h: 4 },
+    { name: "Retail Toilet", key: "Retail_Toilet_2.4_1.5", level: "Ground_Floor", type: "gfa", w: 2.4, h: 1.5 },
+    { name: "Retail Accessible Toilet", key: "Retail_Accessible_Toilet_2.4_1.5", level: "Ground_Floor", type: "gfa", w: 2.4, h: 1.5 },
+    { name: "Restaurant", key: "Restaurant_15_10", level: "Ground_Floor", type: "gfa", w: 15, h: 10, projectTypes: ['Hotel'] },
+    { name: "Ballroom", key: "Ballroom_30_20", level: "Ground_Floor", type: "gfa", w: 30, h: 20, projectTypes: ['Hotel'] },
+    { name: "Meeting Room", key: "Meeting_Room_10_8", level: "Podium", type: "gfa", w: 10, h: 8, projectTypes: ['Hotel'] },
+    { name: "Swimming Pool", key: "Swimming_Pool_15_7", level: "Podium", type: "builtup", w: 15, h: 7 },
+    { name: "Comm_Staircase_Podium", key: "Comm_Staircase_Podium_6_3", level: "Podium", type: "gfa", w: 6, h: 3, role: 'staircase' },
+    { name: "Corridor (Podium)", key: "Corridor_Podium_12.8_2.4", level: "Podium", type: "gfa", w: 12.8, h: 2.4 },
+    { name: "Electrical Room (Podium)", key: "Electrical_Room_Podium_4_3.5", level: "Podium", type: "service", w: 4, h: 3.5 },
+    { name: "Lift (Podium)", key: "Lift_Podium_2.4_2.4", level: "Podium", type: "gfa", w: 2.4, h: 2.4 },
+    { name: "Water Meter (Podium)", key: "Water_Meter_Podium_1.7_1.7", level: "Podium", type: "service", w: 1.7, h: 1.7 },
+    { name: "Meeting Room", key: "Meeting_Room_10_8", level: "Mezzanine", type: "gfa", w: 10, h: 8, projectTypes: ['Hotel'] },
+    { name: "Swimming Pool", key: "Swimming_Pool_15_7", level: "Mezzanine", type: "builtup", w: 15, h: 7 },
+    { name: "Comm_Staircase_Mezzanine", key: "Comm_Staircase_Mezzanine_6_3", level: "Mezzanine", type: "gfa", w: 6, h: 3, role: 'staircase' },
+    { name: "Corridor (Mezzanine)", key: "Corridor_Mezzanine_12.8_2.4", level: "Mezzanine", type: "gfa", w: 12.8, h: 2.4 },
+    { name: "Electrical Room (Mezzanine)", key: "Electrical_Room_Mezzanine_4_3.5", level: "Mezzanine", type: "service", w: 4, h: 3.5 },
+    { name: "Lift_Mezzanine", key: "Lift_Mezzanine_2.4_2.4", level: "Mezzanine", type: "gfa", w: 2.4, h: 2.4 },
+    { name: "Water Meter (Mezzanine)", key: "Water_Meter_Mezzanine_1.7_1.7", level: "Mezzanine", type: "service", w: 1.7, h: 1.7 },
+    { name: "Comm. Corridor (Typical)", key: "Comm_Corridor_Typical_21_1.8", level: "Typical_Floor", type: "gfa", w: 21, h: 1.8 },
+    { name: "Comm. Electrical Room", key: "Comm_Electrical_Room_10_1", level: "Typical_Floor", type: "service", w: 10, h: 1 },
+    { name: "Comm. Garbage Chute", key: "Comm_Garbage_Chute_2.7_1.5", level: "Typical_Floor", type: "service", w: 2.7, h: 1.5 },
+    { name: "Comm. Lift Corridor", key: "Comm_Lift_Corridor_6.6_2.4", level: "Typical_Floor", type: "gfa", w: 6.6, h: 2.4 },
+    { name: "Comm_Staircase_Typical", key: "Comm_Staircase_Typical_6_3", level: "Typical_Floor", type: "gfa", w: 6, h: 3, role: 'staircase' },
+    { name: "Comm. Tele Room", key: "Comm_Tele_Room_2.4_3.5", level: "Typical_Floor", type: "service", w: 2.4, h: 3.5 },
+    { name: "Comm. Water Meter", key: "Comm_Water_Meter_1.7_1.7", level: "Typical_Floor", type: "service", w: 1.7, h: 1.7 },
+    { name: "Comm. Water Meter", key: "Comm_Water_Meter_4_1", level: "Typical_Floor", type: "service", w: 4, h: 1 },
+    { name: "Lift_Typical", key: "Lift_Typical_2.4_2.4", level: "Typical_Floor", type: "gfa", w: 2.4, h: 2.4},
+    { name: "Shaft", key: "Shaft_2_2", level: "Typical_Floor", type: "service", w: 2.0, h: 2.0},
+    { name: "Comm. Gym", key: "Comm_Gym_583_1", level: "Roof", type: "service", w: 583, h: 1 },
+    { name: "Comm. Service (Roof)", key: "Comm_Service_Roof_124_1", level: "Roof", type: "service", w: 124, h: 1 },
+    { name: "Electrical Room", key: "Electrical_Room_3_3.2", level: "Roof", type: "service", w: 3, h: 3.2 },
+    { name: "Garbage Chute", key: "Garbage_Chute_2.7_1.5", level: "Roof", type: "service", w: 2.7, h: 1.5 },
+    { name: "GSM room", key: "GSM_room_2.7_1.5", level: "Roof", type: "service", w: 2.7, h: 1.5 },
+    { name: "Comm_Staircase_Roof", key: "Comm_Staircase_Roof_6_3", level: "Roof", type: "gfa", w: 6, h: 3, role: 'staircase' },
+    { name: "Corridor (Roof)", key: "Corridor_Roof_6.6_2.4", level: "Roof", type: "gfa", w: 6.6, h: 2.4 },
+    { name: "Lift (Roof)", key: "Lift_Roof_2.4_2.4", level: "Roof", type: "gfa", w: 2.4, h: 2.4 },
+    { name: "Terrace Area", key: "Terrace_Area_0.5_1166", level: "Roof", type: "builtup", w: 0.5, h: 1166 }
 ];
 
 export const PREDEFINED_COMPOSITE_BLOCKS = [
     { name: "Residential Core 1", level: "Typical_Floor", blocks: [ { key: "Comm_Staircase_Typical_6_3", x: 0, y: 0 }, { key: "Comm_Staircase_Typical_6_3", x: 8.8, y: 0 }, { key: "Lift_Typical_2.4_2.4", x: 6.2, y: 0 }, { key: "Lift_Typical_2.4_2.4", x: 6.2, y: 2.6 }, { key: "Shaft_2_2", x: 6.3, y: 5.2 } ] },
     { name: "Ground Floor Core", level: "Ground_Floor", blocks: [ { key: "Comm_Staircase_GF_6_3", x: 0, y: 8 }, { key: "Comm_Staircase_GF_6_3", x: 23, y: 8 }, { key: "Lift_GF_2.4_2.4", x: 7, y: 8.3 }, { key: "Lift_GF_2.4_2.4", x: 9.6, y: 8.3 }, { key: "Shaft_2_2", x: 8.8, y: 2.9 }, { key: "Comm_Garbage_Chute_2.7_1.5", x: 6, y: 2.9 }, { key: "Electrical_Room_3_3", x: 0, y: 3.2 }, { key: "Substation_5.1_10.5", x: 20.5, y: 11.5 }, { key: "LV_Room_5.1_8.6", x: 15.2, y: 12 }, { key: "ETS_Room_9_9", x: 0, y: 11.5 }, { key: "Pump_Room_8.5_8", x: 9.2, y: 12 }, { key: "Garbage_Room_8_1", x: 0, y: 20.7 }, { key: "Telephone_Room_5.1_4", x: 20.5, y: 22.2 }, { key: "Electrical_Room_3_3", x: 25.8, y: 22.2 }, { key: "Water_Meter_Podium_1.7_1.7", x: 29, y: 24.5 }, { key: "Control_Room_19_1", x: 0, y: 0 },{ key: "Entrance_Lobby_8_12", x: 0, y: 0 }  ] },
-    { name: "Podium Floor Core", level: "Podium", blocks: [ { key: "Comm_Staircase_Podium_6_3", x: 0, y: 0 }, { key: "Comm_Staircase_Podium_6_3", x: 14.8, y: 0 }, { key: "Lift_Podium_2.4_2.4", x: 6.2, y: 0.3 }, { key: "Lift_Podium_2.4_2.4", x: 8.8, y: 0.3 }, { key: "Lift_Corridor_Podium_12.8_2.4", x: 1.8, y: 3 }, { key: "Electrical_Room_Podium_4_3.5", x: 0, y: 3.2 }, { key: "Telephone_Room_5.1_4", x: 4.2, y: 5.6 }, { key: "Garbage_Room_8_1", x: 9.5, y: 5.6 }, { key: "Water_Meter_Podium_1.7_1.7", x: 17.7, y: 5.6 } ] },
+    { name: "Podium Floor Core", level: "Podium", blocks: [ { key: "Comm_Staircase_Podium_6_3", x: 0, y: 0 }, { key: "Comm_Staircase_Podium_6_3", x: 14.8, y: 0 }, { key: "Lift_Podium_2.4_2.4", x: 6.2, y: 0.3 }, { key: "Lift_Podium_2.4_2.4", x: 8.8, y: 0.3 }, { key: "Lift_Corridor_Podium_12.8_2.4", x: 1.8, y: 3 }, { key: "Electrical_Room_Podium_4_3.5", x: 0, y: 3.2 }, { key: "Telephone_Room_5.1_4", x: 4.2, y: 5.6 }, { key: "Garbage_Room_Podium_8_1", x: 9.5, y: 5.6 }, { key: "Water_Meter_Podium_1.7_1.7", x: 17.7, y: 5.6 } ] },
+    { name: "Mezzanine Floor Core", level: "Mezzanine", blocks: [ { key: "Comm_Staircase_Mezzanine_6_3", x: 0, y: 0 }, { key: "Comm_Staircase_Mezzanine_6_3", x: 14.8, y: 0 }, { key: "Lift_Mezzanine_2.4_2.4", x: 6.2, y: 0.3 }, { key: "Lift_Mezzanine_2.4_2.4", x: 8.8, y: 0.3 }, { key: "Lift_Corridor_Mezzanine_12.8_2.4", x: 1.8, y: 3 }, { key: "Electrical_Room_Mezzanine_4_3.5", x: 0, y: 3.2 }, { key: "Telephone_Room_Mezzanine_5.1_4", x: 4.2, y: 5.6 }, { key: "Garbage_Room_Mezzanine_8_1", x: 9.5, y: 5.6 }, { key: "Water_Meter_Mezzanine_1.7_1.7", x: 17.7, y: 5.6 } ] },
     { name: "Basement Floor Core", level: "Basement", blocks: [ { key: "Comm_Staircase_Basement_6_3", x: 0, y: 0 }, { key: "Comm_Staircase_Basement_6_3", x: 14.8, y: 0 }, { key: "Lift_Basement_2.4_2.4", x: 6.2, y: 0.3 }, { key: "Lift_Basement_2.4_2.4", x: 8.8, y: 0.3 }, { key: "Lift_Basement_2.4_2.4", x: 6.2, y: 2.9 }, { key: "Lift_Basement_2.4_2.4", x: 8.8, y: 2.9 }, { key: "Lift_Corridor_GF_10_2.4", x: 3.5, y: 5.5 }, { key: "Electrical_Room_3_3", x: 0, y: 3.2 }, { key: "Telephone_Room_5.1_4", x: 3.2, y: 8.1 }, { key: "Garbage_Room_8_1", x: 8.5, y: 8.1 }, { key: "Water_Meter_Podium_1.7_1.7", x: 16.7, y: 8.1 }, { key: "GSM_Room_3_3", x: 17, y: 3.2 } ] },
     { name: "Typical Floor Core", level: "Typical_Floor", blocks: [ { key: "Comm_Staircase_Typical_6_3", x: 0, y: 0 }, { key: "Comm_Staircase_Typical_6_3", x: 14.8, y: 0 }, { key: "Lift_Typical_2.4_2.4", x: 6.2, y: 0.3 }, { key: "Lift_Typical_2.4_2.4", x: 8.8, y: 0.3 }, { key: "Lift_Typical_2.4_2.4", x: 6.2, y: 2.9 }, { key: "Lift_Typical_2.4_2.4", x: 8.8, y: 2.9 }, { key: "Comm_Lift_Corridor_6.6_2.4", x: 5.1, y: 5.5 }, { key: "Comm_Electrical_Room_10_1", x: 0, y: 3.2 }, { key: "Comm_Tele_Room_2.4_3.5", x: 12.2, y: 3.2 }, { key: "Comm_Garbage_Chute_2.7_1.5", x: 11.9, y: 6.9 }, { key: "Comm_Water_Meter_1.7_1.7", x: 14.8, y: 6.9 } ] },
     { name: "Roof Floor Core", level: "Roof", blocks: [ { key: "Comm_Staircase_Roof_6_3", x: 0, y: 0 }, { key: "Comm_Staircase_Roof_6_3", x: 14.8, y: 0 }, { key: "Lift_Roof_2.4_2.4", x: 6.2, y: 0.3 }, { key: "Lift_Roof_2.4_2.4", x: 8.8, y: 0.3 }, { key: "Lift_Roof_2.4_2.4", x: 6.2, y: 2.9 }, { key: "Lift_Roof_2.4_2.4", x: 8.8, y: 2.9 }, { key: "Corridor_Roof_6.6_2.4", x: 5.1, y: 5.5 }, { key: "Electrical_Room_Podium_4_3.5", x: 0, y: 3.2 }, { key: "Comm_Tele_Room_2.4_3.5", x: 12.2, y: 3.2 }, { key: "Garbage_Room_8_1", x: 4.8, y: 8.1 }, { key: "Comm_Water_Meter_1.7_1.7", x: 13, y: 8.1 }, { key: "GSM_Room_3_3", x: 17.2, y: 3.2 } ] }
@@ -340,6 +371,9 @@ AREA_STATEMENT_DATA.forEach(item => {
         height: parseFloat(item.h),
         level: item.level,
         category: item.type,
+        role: item.role, // e.g., 'staircase', 'substation'
+        tcl: item.tcl, // default TCL for substation
+        numTx: item.numTx, // default # of transformers for substation
         projectTypes: item.projectTypes // Keep this property
     };
 });

@@ -1,3 +1,4 @@
+
 // MODULE 7: PARKING LAYOUT (parkingLayout.js equivalent)
 // =====================================================================
  import { state } from './state.js';
@@ -83,7 +84,6 @@ export function createParkingGeometry(lineLengthMeters, parkingType, rowType, to
         fill: 'rgba(100, 100, 100, 0.3)', left: 0, top: lane_top_px, originX: 'left', originY: 'top'
     });
     objectsInRow.push(driveLane);
-    let textCenterY_px = (side1Data.depth + LANE_W / 2) / scaleRatio;
     if (rowType === 'double') {
         const side2Data = createBaysForSide();
         const second_row_top_px = lane_top_px + (LANE_W / scaleRatio);
@@ -92,7 +92,6 @@ export function createParkingGeometry(lineLengthMeters, parkingType, rowType, to
             obj.angle = -obj.angle;
         });
         objectsInRow.push(...side2Data.bays);
-        textCenterY_px = (side1Data.depth + LANE_W + side2Data.depth/2) / scaleRatio;
     }
     const bayCountText = new fabric.Text(String(totalBayCount), {
         left: (lineLengthMeters / 2) / scaleRatio, top: lane_top_px + (LANE_W / 2 / scaleRatio),

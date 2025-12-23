@@ -1,3 +1,4 @@
+
 function calculateUnitDimensions(unit) {
     if (!unit.layout || unit.layout.length === 0) {
         unit.frontage = 0;

@@ -1,4 +1,3 @@
-
 // --- START OF FILE labourCampProgram.js ---
 function calculateUnitDimensions(unit) {
     if (!unit.layout || unit.layout.length === 0) {

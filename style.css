@@ -132,6 +132,11 @@ td { padding: 4px; }
     padding: 5px 10px;
     font-size: 0.9em;
 }
+/* added */
+.zoom-controls button.active {
+    background-color: var(--accent-color);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+}
 #parking-info {
     font-size: 0.9em;
     margin-top: 10px;
@@ -168,6 +173,10 @@ td { padding: 4px; }
 .modal-content {
     background: white; padding: 25px; border-radius: 8px;
     width: 300px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+.modal-content.wide {
+    width: 90%;
+    max-width: 800px;
 }
 #level-checklist {
     max-height: 200px; overflow-y: auto; margin-bottom: 15px;
@@ -283,4 +292,104 @@ td { padding: 4px; }
     margin-top: 4px;
     padding-top: 4px;
     border-top: 1px solid var(--medium-gray);
+}
+
+/* Screenshot Gallery */
+#screenshot-gallery-wrapper {
+    margin-top: 10px;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+}
+#screenshot-gallery-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+    margin-top: 5px;
+    max-height: 250px;
+    overflow-y: auto;
+    background: var(--light-gray);
+    padding: 5px;
+    border-radius: 4px;
+}
+.screenshot-card {
+    border: 1px solid var(--medium-gray);
+    border-radius: 4px;
+    padding: 5px;
+    font-size: 0.8em;
+    background: #fff;
+    text-align: center;
+}
+.screenshot-card img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    background: #eee;
+    margin-bottom: 5px;
+}
+.screenshot-card label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-weight: normal;
+    cursor: pointer;
+}
+/* Area Statement Modal Styles */
+#area-statement-body {
+    max-height: 70vh;
+    overflow-y: auto;
+    font-size: 0.9em;
+}
+.area-level-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+.area-level-group h4 {
+    grid-column: 1 / -1; /* Span both columns */
+    margin-bottom: 5px;
+}
+.area-section h5 {
+    margin: 0 0 8px 0;
+    color: var(--secondary-color);
+    border-bottom: 1px solid #eee;
+    padding-bottom: 4px;
+}
+.area-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 5px;
+}
+.area-item.deduction span:last-child {
+    color: #dc3545;
+}
+.area-total {
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    padding: 5px;
+    margin-top: 5px;
+    background-color: #e8eaf6;
+    border-top: 1px solid #c5cae9;
+}
+.area-total.multiplied {
+    background-color: #c5cae9;
+}
+.area-grand-totals {
+    margin-top: 20px;
+    font-size: 1.1em;
+    font-weight: bold;
+}
+.area-grand-totals > div {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px;
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 4px;
+    margin-bottom: 5px;
 }

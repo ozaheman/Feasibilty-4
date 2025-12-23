@@ -1,3 +1,4 @@
+
 // --- START OF FILE hotelRequirements.js ---
 export const HOTEL_REQUIREMENTS = {
     "1-star": {

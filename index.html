@@ -89,7 +89,13 @@
             <button id="apply-individual-setback-btn">Apply to Selected</button>
             <button id="clear-setback-selection-btn" class="warning">Clear Selection</button>
         </div>
-        <button id="draw-building-btn" disabled>Draw Footprint on Level</button>
+        
+        <!-- Updated Footprint Buttons -->
+        <div class="button-grid">
+            <button id="draw-building-btn" disabled>Draw Closed Footprint</button>
+            <button id="draw-linear-btn" disabled>Draw Linear Footprint</button>
+        </div>
+
         <button id="footprint-from-setbacks-btn" class="active" disabled style="margin-top: 5px;">Create Footprint from Setbacks</button>
         <button id="footprint-from-plot-btn" class="active" disabled style="margin-top: 5px;">Create Footprint from Plot</button>
         <div class="button-grid" style="margin-top: 5px;">
@@ -109,6 +115,8 @@
         </div>
         <div id="plot-info" style="font-size:0.8em; margin-top:10px; border-top: 1px solid #eee; padding-top: 5px;"></div>
         <div id="level-footprint-info" style="font-size:0.8em; margin-top:5px;"></div>
+        <!-- NEW: Corridor area display -->
+        <div id="corridor-info" style="font-size:0.8em; margin-top:5px; display:none;"></div>
     </div>
    <div id="manual-plot-wrapper">
             <label style="margin-bottom:2px; font-size:0.85em;">Manual Plot Override (Optional)</label>
@@ -153,9 +161,9 @@
             <div><label for="allowedGfa">Allowed Total GFA (m²)</label><input type="number" class="param-input" id="allowedGfa" value="13427"></div>
             <div><label for="numBasements">Basements</label><input type="number" class="param-input" id="numBasements" value="1" min="0"></div>
             <div><label for="allowedRetailGfa">Allowed Retail GFA (m²)</label><input type="number" class="param-input" id="allowedRetailGfa" value="0"></div>
-            <div><label for="numPodiums">Podiums</label><input type="number" class="param-input" id="numPodiums" value="3" min="0"></div>
+            <div><label for="numMezzanines">Mezzanines</label><input type="number" class="param-input" id="numMezzanines" value="0" min="0"></div>
             <div><label for="allowedOfficeGfa">Allowed Office GFA (m²)</label><input type="number" class="param-input" id="allowedOfficeGfa" value="0"></div>
-            
+            <div><label for="numPodiums">Podiums</label><input type="number" class="param-input" id="numPodiums" value="3" min="0"></div>
             <div><label for="allowedNurseryGfa">Allowed Nursary GFA (m²)</label><input type="number" class="param-input" id="allowedNurseryGfa" value="0"></div>
             <div><label for="numTypicalFloors">Typical Floors</label><input type="number" class="param-input" id="numTypicalFloors" value="11" min="0"></div>
              <div><label for="numHotelFloors">Hotel Floors</label><input type="number" class="param-input" id="numHotelFloors" value="0" min="0"></div>
@@ -175,11 +183,26 @@
         <select id="serviceBlockType" multiple></select>
         <button id="add-block-btn" disabled>Add Block(s) to Plan</button>
         <div id="selected-object-controls">
-            <h4>Selected Object</h4>
-            <button id="toggle-lock-btn" class="lock-btn locked">🔒 Locked</button>
-             <div id="dimension-controls-wrapper" class="input-grid" style="margin-bottom:10px;">
+            <h4>Selected Object: <span id="selected-object-name"></span></h4>
+               <div id="category-controls-wrapper" style="display:none; margin-bottom:10px;">
+                <label for="block-category-select">Area Type</label>
+                <select id="block-category-select" style="margin-bottom:0;"></select>
+            </div>
+            
+            <div class="button-grid">
+                <button id="toggle-lock-btn" class="lock-btn locked">🔒 Locked</button>
+                <button id="edit-group-btn" class="warning">Edit Group</button>
+            </div>
+             <button id="confirm-group-edit-btn" style="display:none; margin-top:5px;" class="active">✓ Finish Editing</button>
+            <div id="dimension-controls-wrapper" class="input-grid" style="margin-bottom:10px; margin-top:10px;">
                 <div><label for="block-width">Width (m)</label><input type="number" id="block-width" step="0.1"></div>
                 <div><label for="block-height">Height (m)</label><input type="number" id="block-height" step="0.1"></div>
+            </div>
+            <div id="substation-controls-wrapper" style="display:none; margin-bottom:10px; margin-top:10px;">
+                <div class="input-grid">
+                    <div><label for="substation-tcl">TCL (kW)</label><input type="number" id="substation-tcl" step="100" value="1500"></div>
+                    <div><label for="substation-num-tx"># Transformers</label><input type="number" id="substation-num-tx" step="1" min="1" value="1"></div>
+                </div>
             </div>
             <div id="rotation-control-wrapper">
                 <label for="block-rotation">Rotation (°):</label>
@@ -211,6 +234,14 @@
          <div style="font-size: 0.9em; margin-top: 5px;">
              <label><input type="checkbox" id="auto-place-core-check"> Auto-place Core on Footprint</label>
          </div>
+          <div class="button-grid" style="margin-bottom: 10px;">
+        <button id="export-blocks-csv-btn">Export CSV</button>
+        <label for="import-blocks-csv-upload" class="button">Import CSV</label>
+        <input type="file" id="import-blocks-csv-upload" accept=".csv" style="display:none;">
+    </div>
+    <div id="service-block-list" style="max-height: 200px; overflow-y: auto; background: #f9f9f9; padding: 5px; border-radius: 4px; font-size: 0.8em;">
+        <!-- List will be rendered here -->
+    </div>
         <div class="button-grid-3" style="margin-top: 5px;">
             <button id="edit-composite-btn" class="warning">Edit</button>
             <button id="new-composite-btn" class="active">New</button>
@@ -240,7 +271,10 @@
                 </select>
             </div>
         </div>
-        <button id="draw-parking-btn" disabled>Draw Car Parking</button>
+           <div class="button-grid">
+            <button id="draw-parking-btn" disabled>Draw Car Parking</button>
+            <button id="draw-parking-on-edge-btn" disabled>Draw Parking Along Edge</button>
+        </div>
         <div class="input-grid" style="margin-top: 10px;">
              <div>
                 <label for="bus-seater-type">Bus Seater</label>
@@ -333,15 +367,28 @@
             <button id="previewLayoutBtn" disabled>Preview Layout</button>
             <button id="export-pdf-btn" class="warning" disabled>Export PDF Report</button>
         </div>
+         <!-- NEW: Manual Area Statement Button -->
+        <button id="area-statement-btn" style="margin-top: 5px;">View Area Statement</button>
+        <!-- NEW: PDF Report Detail Toggle -->
+        <div id="report-detail-toggle" class="button-grid" style="font-size:0.9em; margin-top:5px;">
+            <label><input type="radio" name="report-detail" value="full" checked> Full PDF</label>
+            <label><input type="radio" name="report-detail" value="brief"> Brief PDF</label>
+        </div>
          <div id="layout-preview-controls" class="checkbox-grid" style="font-size: 0.9em; margin-top: 5px;">
             <label><input type="checkbox" id="show-balconies-check" checked> Show Balconies</label>
             <label><input type="checkbox" id="show-corridor-check" checked> Show Corridor</label>
-            <label><input type="checkbox" id="include-screenshots-in-report"> Include Screenshots</label>
+              </div>
+        <div id="screenshot-gallery-wrapper">
+             <h4>Include Level Plans in PDF</h4>
+             <div id="screenshot-gallery-container">
+                <!-- Thumbnails will be populated here -->
+             </div>
         </div>
         <div class="button-grid" style="margin-top: 10px;">
             <button id="generate3dBtn" disabled>Generate 3D Model</button>
             <button id="exportScadBtn" disabled>Export OpenSCAD</button>
         </div>
+        <button id="align-core-btn" style="margin-top: 5px;" disabled>Align Vertical Core</button>
         <div id="threed-visibility-controls" class="checkbox-grid" style="font-size: 0.9em; margin-top: 5px;">
             <label><input type="checkbox" id="show-apartments-3d" checked> Show Apartments</label>
             <label><input type="checkbox" id="show-balconies-3d" checked> Show Balconies</label>
@@ -354,6 +401,7 @@
 
 <div class="main-content">
     <div class="zoom-controls">
+    <button id="select-tool-btn" title="Select Tool">👆 Select</button>
         <button id="pan-btn" title="Pan Tool (Hold Spacebar)">✋ Pan</button>
         <button id="zoom-in-btn">+</button>
         <button id="zoom-out-btn">-</button>
@@ -386,8 +434,12 @@
         <div class="dash-row"><span>Sellable Area:</span> <span class="dash-val" id="dash-sellable">0</span></div>
         <div id="dash-wing-details" style="font-size: 0.9em; margin-top: 5px;"></div>
         
-        <div class="dash-row header">Occupancy & Services</div>
+        <div class="dash-row header">Occupancy & Egress</div>
         <div class="dash-row"><span>Est. Occupancy:</span> <span class="dash-val" id="dash-occupancy">0</span></div>
+        <div class="dash-row"><span>Lifts (Req/Prov):</span> <span class="dash-val" id="dash-lifts-info">0 / 0</span></div>
+        <div class="dash-row"><span>Stairs (Req/Prov):</span> <span class="dash-val" id="dash-stairs-info">0 / 0</span></div>
+
+        <div class="dash-row header">Utilities</div>
         <div class="dash-row"><span>Garbage Bins Req.:</span> <span class="dash-val" id="dash-garbage-req">0</span></div>
         <div class="dash-row"><span>Water Req:</span> <span class="dash-val" id="dash-water-req">0 m³/d</span></div>
         <div class="dash-row header" style="font-size:0.9em; margin-top:5px; background:#e3f2fd;">Power</div>
@@ -468,6 +520,35 @@
         </div>
     </div>
 </div>
+
+<!-- NEW: Manual Area Statement Modal -->
+<div id="area-statement-modal" class="modal-overlay">
+    <div class="modal-content wide">
+        <h3>Manual Area Statement</h3>
+        <div id="area-statement-body"></div>
+        <div class="add-manual-area-form">
+            <h4>Add Manual Entry</h4>
+            <div class="input-grid-3">
+                <select id="manual-area-level"></select>
+                <select id="manual-area-type">
+                    <option value="sellableGfa">Sellable GFA</option>
+                    <option value="commonGfa">Common GFA</option>
+                    <option value="service">Service</option>
+                    <option value="parking">Parking</option>
+                    <option value="balconyTerrace">Balcony/Terrace</option>
+                </select>
+                <input type="number" id="manual-area-value" placeholder="Area (m²)">
+            </div>
+            <button id="add-manual-area-btn">Add Entry</button>
+        </div>
+        <div class="button-grid" style="margin-top: 20px;">
+            <button id="save-area-statement-btn" class="active">Save & Close</button>
+            <button id="reset-area-overrides-btn" class="warning">Reset All</button>
+            <button id="close-area-statement-btn" class="danger">Cancel</button>
+        </div>
+    </div>
+</div>
+
 
 <script type="importmap">
     {
