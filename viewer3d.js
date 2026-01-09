@@ -1,3 +1,5 @@
+//--- START OF FILE viewer3d.js ---
+
 
 
 import * as THREE from "three";

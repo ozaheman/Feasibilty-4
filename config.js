@@ -1,3 +1,4 @@
+
 //--- START OF FILE config.js ---
 
 // MODULE 1: CONFIG & PROGRAM DATA (config.js equivalent)
@@ -120,16 +121,26 @@ export const RESIDENTIAL_PROGRAM = {
 RESIDENTIAL_PROGRAM.unitTypes.forEach(calculateUnitDimensions);
 
 export const SCHOOL_PROGRAM = {
-    title: "Room Mix", unitDefsTitle: "Room Definitions",
-    unitTypes: [
-        {key:"classroom", type:"Classroom", layout:[{name:'Class', x:0, y:0, w:8, h:10}], color:'rgba(59, 130, 246, 0.7)', mix:60},
-        {key:"lab_small", type:"Small Lab", layout:[{name:'Lab', x:0, y:0, w:8, h:12}], color:'rgba(16, 185, 129, 0.7)', mix:20},
-        {key:"office", type:"Office", layout:[{name:'Office', x:0, y:0, w:4, h:5}], color:'rgba(251, 191, 36, 0.7)', mix:20},
+    title: "School Program", unitDefsTitle: "Room Definitions",
+    unitTypes: [ // These are representations, not for layout mix. `num` is from the image.
+        { key: "classroom_g7_12", type: "Classroom (G7-12)", area: 60, color: 'rgba(59, 130, 246, 0.7)', num: 26, layout: [{ name: 'Class', x: 0, y: 0, w: 7.5, h: 8 }] },
+        { key: "classroom_g13", type: "Classroom (G13)", area: 65, color: 'rgba(16, 185, 129, 0.7)', num: 6, layout: [{ name: 'Class', x: 0, y: 0, w: 8, h: 8.125 }] },
     ],
-    scenarios: [ {name:"Standard School",mix:[60,20,20]} ],
+    scenarios: [ { name: "Standard School", mix: [] } ], // Mix not applicable here
+    parkingRules: {
+        carPerClassroom: 1,
+        carPerAdminSqm: 50, // Corrected from image typo: 900sqm / 18 cars = 50sqm/car
+        busPerClassroom: 1/3,
+        accessibleRatio: 1/50, // 1 for every 50 -> 2 required for 50+50 parking
+    },
+    playAreaMultiplier: 2.0, // 2 x Classroom Area
+    coveredPlayAreaRatio: 0.5, // 50% of total
+    garbageKgPer100Sqm: 12,
+    getParkingRuleDescription: () => 'School Specific Rules', // Placeholder
     calculateUnitDimensions,
 };
 SCHOOL_PROGRAM.unitTypes.forEach(calculateUnitDimensions);
+
 
 export const LABOUR_CAMP_PROGRAM = {
     title: "Room Mix", unitDefsTitle: "Room Definitions",
@@ -210,7 +221,17 @@ export const AREA_STATEMENT_DATA = [
     { name: "Comm_Staircase_Roof", key: "Comm_Staircase_Roof_6_3", level: "Roof", type: "gfa", w: 6, h: 3, role: 'staircase' },
     { name: "Corridor (Roof)", key: "Corridor_Roof_6.6_2.4", level: "Roof", type: "gfa", w: 6.6, h: 2.4 },
     { name: "Lift (Roof)", key: "Lift_Roof_2.4_2.4", level: "Roof", type: "gfa", w: 2.4, h: 2.4 },
-    { name: "Terrace Area", key: "Terrace_Area_0.5_1166", level: "Roof", type: "builtup", w: 0.5, h: 1166 }
+    { name: "Terrace Area", key: "Terrace_Area_0.5_1166", level: "Roof", type: "builtup", w: 0.5, h: 1166 },
+    // NEW School Blocks
+    { name: "Admin Office", key: "Admin_Office_30_30", level: "Ground_Floor", type: "gfa", w: 30, h: 30, role: 'admin_area', projectTypes: ['School'] },
+    { name: "School Library", key: "School_Library_15_20", level: "Ground_Floor", type: "gfa", w: 15, h: 20, projectTypes: ['School'] },
+    { name: "School Clinic", key: "School_Clinic_6_8", level: "Ground_Floor", type: "gfa", w: 6, h: 8, projectTypes: ['School'] },
+    { name: "Auditorium", key: "Auditorium_25_35", level: "Ground_Floor", type: "gfa", w: 25, h: 35, projectTypes: ['School'] },
+    { name: "Covered Play Area", key: "Covered_Play_Area_20_20", level: "Ground_Floor", type: "builtup", w: 20, h: 20, projectTypes: ['School'] },
+    // NEW Labour Camp Blocks
+    { name: "Mess Hall", key: "Mess_Hall_20_30", level: "Ground_Floor", type: "gfa", w: 20, h: 30, projectTypes: ['LabourCamp'] },
+    { name: "Camp Kitchen", key: "Camp_Kitchen_15_15", level: "Ground_Floor", type: "service", w: 15, h: 15, projectTypes: ['LabourCamp'] },
+    { name: "Recreation Room", key: "Recreation_Room_10_15", level: "Ground_Floor", type: "gfa", w: 10, h: 15, projectTypes: ['LabourCamp'] }
 ];
 
 export const PREDEFINED_COMPOSITE_BLOCKS = [
@@ -364,8 +385,9 @@ export const HOTEL_REQUIREMENTS = {
 
 export const PREDEFINED_BLOCKS = {};
 AREA_STATEMENT_DATA.forEach(item => {
-    const key = `${item.name.replace(/[\s().]/g, '_')}_${item.w}_${item.h}`;
+    const key = `${item.name.replace(/[\s()./]/g, '_')}_${item.w}_${item.h}`;
     PREDEFINED_BLOCKS[key] = {
+         key: key, // Add the key to the data object itself for easier lookup
         name: item.name,
         width: parseFloat(item.w),
         height: parseFloat(item.h),

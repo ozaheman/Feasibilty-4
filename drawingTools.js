@@ -2,22 +2,57 @@
 
 // MODULE 5: DRAWING TOOLS & SNAPPING (drawingTools.js equivalent)
 // =====================================================================
-import { getCanvas } from './canvasController.js';
+import { getCanvas, getOverlayContext } from './canvasController.js';
 import { resetState,state } from './state.js';
 import { pointToLineSegmentDistance,getLineIntersection,allocateCountsByPercent,f,fInt ,getPolygonProperties } from './utils.js';
 import { initUI, updateUI,applyLevelVisibility,updateLevelFootprintInfo , updateParkingDisplay,updateMixTotal } from './uiController.js';
+// REMOVED: import { exitAllModes, handleFinishPolygon, handleObjectModified, handleDblClick } from './eventHandlers.js';
+// IMPORT only what is needed, and NOT handleDblClick
 import { exitAllModes, handleFinishPolygon, handleObjectModified } from './eventHandlers.js';
 import { generateLinearParking } from './parkingLayoutUtils.js';
+import { PREDEFINED_BLOCKS, BLOCK_CATEGORY_COLORS } from '../config.js';
 
 import { layoutFlatsOnPolygon} from './apartmentLayout.js';
 window.snapIndicators=null;
+
+let cancelBtnEl = null;
+
+function createCancelButton() {
+    if (cancelBtnEl) return;
+    const canvasContainer = document.querySelector('.canvas-container-wrapper');
+    if (!canvasContainer) return;
+
+    cancelBtnEl = document.createElement('div');
+    cancelBtnEl.id = 'cancel-drawing-btn';
+    cancelBtnEl.textContent = '✕';
+    cancelBtnEl.title = 'Cancel Drawing (Esc)';
+    
+    // Position fixed relative to the canvas container
+    cancelBtnEl.style.position = 'absolute';
+    cancelBtnEl.style.top = '20px'; // Offset from top of container
+    cancelBtnEl.style.left = '20px'; // Offset from left of container
+
+    cancelBtnEl.addEventListener('click', exitAllModes);
+    canvasContainer.appendChild(cancelBtnEl);
+}
+
+function removeCancelButton() {
+    if (cancelBtnEl) {
+        cancelBtnEl.removeEventListener('click', exitAllModes);
+        if(cancelBtnEl.parentNode) {
+            cancelBtnEl.parentNode.removeChild(cancelBtnEl);
+        }
+        cancelBtnEl = null;
+    }
+}
 
 export function initDrawingTools() {
 snapIndicators = new fabric.Group([], { evented: false, selectable: false, isSnapIndicator: true });
 state.canvas.add(snapIndicators);
 }
 export function resetDrawingState() {
-polygonPoints = [];
+polygonPoints.length = 0; // Use length = 0 to clear the exported array
+finalpolygonPoints = []; // Use length = 0 to clear the exported array
 if (currentDrawingPolygon) state.canvas.remove(currentDrawingPolygon);
 currentDrawingPolygon = null;
 if (scaleLine) state.canvas.remove(scaleLine);
@@ -28,6 +63,7 @@ if (alignmentHighlight) state.canvas.remove(alignmentHighlight);
 alignmentHighlight = null;
 snapIndicators.remove(...snapIndicators.getObjects());
 clearEdgeSnapIndicator();
+removeCancelButton(); // Ensure the cancel button is removed
 state.canvas.renderAll();
 }
 export function getOffsetPoints(points) {
@@ -337,6 +373,37 @@ edgeSnapIndicator = null;
 state.canvas.renderAll();
 }
 }
+
+export function addDrawingPoint(point) {
+    if (polygonPoints.length > 0) {
+        const last = polygonPoints[polygonPoints.length - 1];
+        if (Math.hypot(point.x - last.x, point.y - last.y) < 2) {
+            return; 
+        }
+    }
+
+    polygonPoints.push(point);
+    if (!currentDrawingPolygon) {
+        const newPoints = [...polygonPoints, { x: point.x, y: point.y }];
+        const isClosedPreview = document.getElementById('auto-close-preview-check').checked && state.currentMode !== 'drawingLinearBuilding';
+        const options = {
+            stroke: '#f50057', strokeWidth: 2, fill: isClosedPreview ? 'rgba(245, 0, 87, 0.2)' : 'transparent',
+            selectable: false, evented: false, objectCaching: false, strokeUniform: true,
+        };
+        currentDrawingPolygon = (state.currentMode === 'drawingLinearBuilding' || !isClosedPreview) ?
+            new fabric.Polyline(newPoints, options) :
+            new fabric.Polygon(newPoints, options);
+        state.canvas.add(currentDrawingPolygon);
+    }
+
+    if ((state.currentMode === 'drawingLinearBuilding' || state.currentMode === 'drawingBuilding' || state.currentMode === 'drawingPlot') && polygonPoints.length === 1) {
+        createCancelButton();
+    }
+
+    handleCanvasMouseMove({ e: { clientX: state.lastMousePosition.x, clientY: state.lastMousePosition.y } });
+    state.canvas.requestRenderAll();
+}
+
 export function handleCanvasMouseDown(pointer) {
 const activeSnap = snapIndicators.getObjects().find(o => o.isSnapPoint);
 if (activeSnap) { pointer.x = activeSnap.left; pointer.y = activeSnap.top; }
@@ -344,7 +411,6 @@ if (activeSnap) { pointer.x = activeSnap.left; pointer.y = activeSnap.top; }
 
 switch (state.currentMode) {
     case 'scaling':
-    
         scaleLine = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
             stroke: 'rgba(211, 47, 47, 0.8)', strokeWidth: 2, selectable: false, evented: false, strokeUniform: true,
         });
@@ -360,48 +426,26 @@ switch (state.currentMode) {
     case 'drawingPlot':
     case 'drawingBuilding':
     case 'drawingLinearBuilding':
-        // Check for closing loop (Polygon only)
         if (state.currentMode !== 'drawingLinearBuilding' && polygonPoints.length > 2 && Math.hypot(pointer.x - polygonPoints[0].x, pointer.y - polygonPoints[0].y) < 10 / state.canvas.getZoom()) {
-            const finalPolygon = new fabric.Polygon(polygonPoints, { selectable: false, evented: false, objectCaching: false });
+            
+            const finalPolygon = new fabric.Polygon(finalpolygonPoints, { selectable: false, evented: false, objectCaching: false });
             resetDrawingState();
             return { action: 'finishPolygon', polygon: finalPolygon };
         }
-        
-        // Check for duplicate point (e.g. fast double click residue)
-        if (polygonPoints.length > 0) {
-            const last = polygonPoints[polygonPoints.length - 1];
-            if (Math.hypot(pointer.x - last.x, pointer.y - last.y) < 2) {
-                return null; // Skip duplicate point
-            }
-        }
-
-        polygonPoints.push({ x: pointer.x, y: pointer.y });
-        if (!currentDrawingPolygon) {
-             const newPoints = [...polygonPoints, { x: pointer.x, y: pointer.y }];
-             const isClosedPreview = document.getElementById('auto-close-preview-check').checked && state.currentMode !== 'drawingLinearBuilding';
-             
-             const options = {
-                stroke: '#f50057', strokeWidth: 2, fill: isClosedPreview ? 'rgba(245, 0, 87, 0.2)' : 'transparent', 
-                selectable: false, evented: false, objectCaching: false, strokeUniform: true,
-             };
-             // For linear building, always use Polyline
-             currentDrawingPolygon = (state.currentMode === 'drawingLinearBuilding' || !isClosedPreview) ? 
-                new fabric.Polyline(newPoints, options) : 
-                new fabric.Polygon(newPoints, options);
-                
-            state.canvas.add(currentDrawingPolygon);
-        }
+       finalpolygonPoints.push({ x: pointer.x, y: pointer.y });
+        addDrawingPoint({ x: pointer.x, y: pointer.y });
         break;
 }
 return null;
-
 }
 export function handleCanvasMouseMove(o) {
-
-
 let pointer = state.canvas.getPointer(o.e);
 let liveLayoutData = null;
 let liveUnitCounts = null;
+
+state.liveDimensionLine = null;
+
+// The cancel button is now fixed, no need to move it.
 
 if (['drawingPlot', 'drawingBuilding', 'drawingLinearBuilding', 'drawingGuide', 'scaling', 'measuring'].includes(state.currentMode)) {
     const snapPoint = findSnapPoint(pointer);
@@ -411,35 +455,48 @@ if (['drawingPlot', 'drawingBuilding', 'drawingLinearBuilding', 'drawingGuide', 
 
 switch (state.currentMode) {
     case 'scaling':
-   
-        if (scaleLine) { scaleLine.set({ x2: pointer.x, y2: pointer.y }); }
+        if (scaleLine) { 
+            scaleLine.set({ x2: pointer.x, y2: pointer.y }); 
+            state.liveDimensionLine = { p1: { x: scaleLine.x1, y: scaleLine.y1 }, p2: pointer };
+        }
+        break;
+    case 'drawingGuide':
+        if (guideLine) {
+            guideLine.set({ x2: pointer.x, y2: pointer.y });
+            state.liveDimensionLine = { p1: { x: guideLine.x1, y: guideLine.y1 }, p2: pointer };
+        }
         break;
     case 'drawingPlot':
     case 'drawingBuilding':
     case 'drawingLinearBuilding':
         if (currentDrawingPolygon) {
+            if (polygonPoints.length > 0) {
+                state.liveDimensionLine = { p1: polygonPoints[polygonPoints.length - 1], p2: pointer };
+            }
             const newPoints = [...polygonPoints, { x: pointer.x, y: pointer.y }];
              if (currentDrawingPolygon.type === 'polygon') {
                 currentDrawingPolygon.set({ points: newPoints });
             } else {
-                // For Polyline
                 currentDrawingPolygon.points[currentDrawingPolygon.points.length - 1] = { x: pointer.x, y: pointer.y };
-                currentDrawingPolygon.set({ points: currentDrawingPolygon.points }); // Trigger update
+                currentDrawingPolygon.set({ points: currentDrawingPolygon.points });
             }
 
-            // Create a temporary shape to get properties
             const tempFabricShape = state.currentMode === 'drawingLinearBuilding' ?
                 new fabric.Polyline(newPoints) : new fabric.Polygon(newPoints);
             
             const props = getPolygonProperties(tempFabricShape);
-            const area = props.area;
-            let statusText = `Drawing... Area: ${f(area)} m²`;
+            let statusText;
+            if (state.currentMode === 'drawingLinearBuilding') {
+                statusText = `Drawing... Length: ${f(props.perimeter, 1)} m`;
+            } else {
+                statusText = `Drawing... Area: ${f(props.area)} m²`;
+            }
             
             const isLayoutLevel = state.currentLevel === 'Typical_Floor';
 
-            if (isLayoutLevel) {
+            if (isLayoutLevel && state.currentMode !== 'drawingLinearBuilding') {
                 const numFloors = parseInt(document.getElementById('numTypicalFloors').value) || 0;
-                const achievedGfa = area * numFloors;
+                const achievedGfa = props.area * numFloors;
                 const allowedGfa = parseFloat(document.getElementById('allowedGfa').value) || 0;
                 statusText += ` | Total GFA: ${f(achievedGfa)} / ${f(allowedGfa)} m²`;
             }
@@ -448,10 +505,9 @@ switch (state.currentMode) {
                 const program = state.currentProgram;
                 const totalMix = program.unitTypes.reduce((sum, t) => sum + (t.mix || 0), 0) || 1;
                 const avgFrontage = program.unitTypes.reduce((acc, unit) => acc + ((unit.frontage || 0) * ((unit.mix || 0) / totalMix)), 0);
-                let tempPerimeter = props.perimeter; // getPolygonProperties now returns in meters
-
+                
                 if (avgFrontage > 0) {
-                    const estimatedUnits = Math.floor(tempPerimeter / avgFrontage);
+                    const estimatedUnits = Math.floor(props.perimeter / avgFrontage);
                     const counts = allocateCountsByPercent(estimatedUnits, program.unitTypes);
                     const calcMode = document.getElementById('apartment-calc-mode').value;
                     const doubleLoaded = document.getElementById('double-loaded-corridor').checked;
@@ -473,7 +529,7 @@ switch (state.currentMode) {
 
 state.livePreviewLayout = liveLayoutData;
 if (liveUnitCounts) updateParkingDisplay(liveUnitCounts);
-state.canvas.renderAll();
+state.canvas.requestRenderAll();
 return { liveLayoutData, liveUnitCounts };
 
 }
@@ -495,8 +551,8 @@ exitAllModes();
 clearEdgeSnapIndicator();
 updateDashboard();
 }
+
 export function handleDblClick(o) {
-    // Dbl-click is now only for finishing a drawing. Vertex removal is handled by icons.
     if ((state.currentMode === 'drawingPlot' || state.currentMode === 'drawingBuilding' || state.currentMode === 'drawingLinearBuilding') && polygonPoints.length > 1) {
         const pLast = polygonPoints[polygonPoints.length - 1];
         const pPrev = polygonPoints[polygonPoints.length - 2];
@@ -510,6 +566,7 @@ export function handleDblClick(o) {
         handleFinishPolygon(finalShape);
     }
 }
+
 export function finishScaling() {
 if (!scaleLine) return null;
 const lengthInPixels = Math.hypot(scaleLine.x2 - scaleLine.x1, scaleLine.y2 - scaleLine.y1);
@@ -520,44 +577,38 @@ return { pixels: lengthInPixels, meters: lengthInMeters };
 }
 return null;
 }
-export function drawMeasurement(ctx, p1, o) {
-if (!ctx || !p1 || !o || state.scale.ratio === 0) return;
+export function drawMeasurement(ctx, p1, endPoint) {
+    if (!ctx || !p1 || !endPoint || state.scale.ratio === 0) return;
 
-
-const pointer = state.canvas.getPointer(o);
-const snapPoint = findSnapPoint(pointer);
-const endPoint = snapPoint ? snapPoint : pointer;
-
-const vpt = state.canvas.viewportTransform;
-ctx.save();
-ctx.setTransform(1, 0, 0, 1, 0, 0);
-ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-ctx.setTransform(vpt[0], vpt[1], vpt[2], vpt[3], vpt[4], vpt[5]);
-ctx.beginPath();
-ctx.moveTo(p1.x, p1.y);
-ctx.lineTo(endPoint.x, endPoint.y);
-ctx.strokeStyle = '#f50057';
-ctx.lineWidth = 2 / state.canvas.getZoom();
-ctx.stroke();
-const distPixels = Math.hypot(endPoint.x - p1.x, endPoint.y - p1.y);
-const distMeters = distPixels * state.scale.ratio;
-const text = `${distMeters.toFixed(3)} m`;
-const midX = (p1.x + endPoint.x) / 2;
-const midY = (p1.y + endPoint.y) / 2;
-ctx.font = `${14 / state.canvas.getZoom()}px sans-serif`;
-const textMetrics = ctx.measureText(text);
-const textWidth = textMetrics.width;
-const textHeight = 14 / state.canvas.getZoom();
-ctx.globalAlpha = 0.8;
-ctx.fillStyle = '#333';
-ctx.fillRect(midX - textWidth/2 - 5/state.canvas.getZoom(), midY - textHeight, textWidth + 10/state.canvas.getZoom(), textHeight + 5/state.canvas.getZoom());
-ctx.globalAlpha = 1.0;
-ctx.fillStyle = 'white';
-ctx.textAlign = 'center';
-ctx.textBaseline = 'middle';
-ctx.fillText(text, midX, midY - textHeight/2 + 2/state.canvas.getZoom());
-ctx.restore();
-
+    const vpt = state.canvas.viewportTransform;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // No clearing here, handleAfterRender does that
+    ctx.setTransform(vpt[0], vpt[1], vpt[2], vpt[3], vpt[4], vpt[5]);
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(endPoint.x, endPoint.y);
+    ctx.strokeStyle = '#f50057';
+    ctx.lineWidth = 2 / state.canvas.getZoom();
+    ctx.stroke();
+    const distPixels = Math.hypot(endPoint.x - p1.x, endPoint.y - p1.y);
+    const distMeters = distPixels * state.scale.ratio;
+    const text = `${distMeters.toFixed(3)} m`;
+    const midX = (p1.x + endPoint.x) / 2;
+    const midY = (p1.y + endPoint.y) / 2;
+    ctx.font = `${14 / state.canvas.getZoom()}px sans-serif`;
+    const textMetrics = ctx.measureText(text);
+    const textWidth = textMetrics.width;
+    const textHeight = 14 / state.canvas.getZoom();
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(midX - textWidth/2 - 5/state.canvas.getZoom(), midY - textHeight, textWidth + 10/state.canvas.getZoom(), textHeight + 5/state.canvas.getZoom());
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, midX, midY - textHeight/2 + 2/state.canvas.getZoom());
+    ctx.restore();
 }
 
 // --- NEW POLYGON EDITING LOGIC ---
@@ -660,7 +711,11 @@ function renderRemoveControl(ctx, left, top, styleOverride, fabricObject) {
 
 export function refreshEditablePolygon(polygon) {
     const controls = {};
+    const isPolyline = polygon.type === 'polyline';
+    const numPoints = polygon.points.length;
+
     polygon.points.forEach((point, index) => {
+        // Vertex controls
         controls[`p${index}`] = new fabric.Control({
             positionHandler: polygonPositionHandler,
             actionHandler: actionHandler,
@@ -668,25 +723,31 @@ export function refreshEditablePolygon(polygon) {
             pointIndex: index,
             render: renderCircleControl,
         });
-        controls[`m${index}`] = new fabric.Control({
-            positionHandler: midpointPositionHandler,
-            actionName: 'addPolygonPoint',
-            pointIndex: index,
-            render: renderPlusControl,
-            mouseDownHandler: (eventData, transform) => {
-                const poly = transform.target;
-                const currentControl = poly.controls[transform.corner];
-                const pointIndex = currentControl.pointIndex;
-                const p1 = poly.points[pointIndex];
-                const p2 = poly.points[(pointIndex + 1) % poly.points.length];
-                const newPoint = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-                poly.points.splice(pointIndex + 1, 0, newPoint);
-                refreshEditablePolygon(poly);
-                state.canvas.requestRenderAll();
-                state.canvas.fire('mouse:up'); // <-- FIX: Release the mouse
-                return true;
-            }
-        });
+
+        // Midpoint controls (don't add one for the last segment of a polyline)
+        if (!(isPolyline && index === numPoints - 1)) {
+            controls[`m${index}`] = new fabric.Control({
+                positionHandler: midpointPositionHandler,
+                actionName: 'addPolygonPoint',
+                pointIndex: index,
+                render: renderPlusControl,
+                mouseDownHandler: (eventData, transform) => {
+                    const poly = transform.target;
+                    const currentControl = poly.controls[transform.corner];
+                    const pointIndex = currentControl.pointIndex;
+                    const p1 = poly.points[pointIndex];
+                    const p2 = poly.points[(pointIndex + 1) % poly.points.length];
+                    const newPoint = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+                    poly.points.splice(pointIndex + 1, 0, newPoint);
+                    refreshEditablePolygon(poly);
+                    state.canvas.requestRenderAll();
+                    state.canvas.fire('mouse:up'); // <-- FIX: Release the mouse
+                    return true;
+                }
+            });
+        }
+        
+        // Remove controls
         controls[`r${index}`] = new fabric.Control({
             positionHandler: removePositionHandler,
             actionName: 'removePolygonPoint',
@@ -694,7 +755,9 @@ export function refreshEditablePolygon(polygon) {
             render: renderRemoveControl,
             mouseDownHandler: (eventData, transform) => {
                 const poly = transform.target;
-                if (poly.points.length <= 3) return false;
+                const minPoints = poly.type === 'polyline' ? 2 : 3;
+                if (poly.points.length <= minPoints) return false;
+
                 const currentControl = poly.controls[transform.corner];
                 const pointIndex = currentControl.pointIndex;
                 poly.points.splice(pointIndex, 1);
@@ -738,4 +801,71 @@ export function makeFootprintUneditable(polygon) {
         selectable: false, evented: false,
     }).setCoords();
     state.canvas.renderAll();
+}
+
+export function placeServiceBlock(pointer, blockKeyOrData, levelOverride = null) {
+    let blockData;
+    if (typeof blockKeyOrData === 'string') {
+        blockData = PREDEFINED_BLOCKS[blockKeyOrData];
+    } else {
+        blockData = blockKeyOrData;
+    }
+    
+    if (!blockData || !state.scale.ratio) return;
+    const blockWidth = blockData.width / state.scale.ratio;
+    const blockHeight = blockData.height / state.scale.ratio;
+    const colors = BLOCK_CATEGORY_COLORS[blockData.category || 'default'];
+    const blockId = `SB-${state.serviceBlockCounter++}`;
+    const rect = new fabric.Rect({ width: blockWidth, height: blockHeight, fill: colors.fill, stroke: colors.stroke, strokeWidth: 2, originX: 'center', originY: 'center', strokeUniform: true });
+    const label = new fabric.Text(blockId, { fontSize: Math.min(blockWidth, blockHeight) * 0.2, fill: '#fff', backgroundColor: 'rgba(0,0,0,0.4)', originX: 'center', originY: 'center' });
+    const lockIcon = new fabric.Text("🔒", { fontSize: Math.min(blockWidth, blockHeight) * 0.2, left: Math.min(blockWidth, blockHeight) * 0.2, originY: 'center', visible: true });
+
+    const group = new fabric.Group([rect, label, lockIcon], {
+        left: pointer.x, 
+        top: pointer.y, 
+        originX: 'center', 
+        originY: 'center',
+        isServiceBlock: true, 
+        blockData: { ...blockData }, // Use a copy
+        blockId: blockId, 
+        level: levelOverride || state.currentLevel, 
+        selectable: true,
+        evented: true,
+        lockScalingX: true,
+        lockScalingY: true,
+    });
+    state.serviceBlocks.push(group);
+    state.canvas.add(group);
+    return group;
+}
+
+export function createCompositeGroup(compositeData, pointer) {
+    if (!compositeData || state.scale.ratio === 0) return;
+    const items = [];
+    const compositeLevel = compositeData.level || state.currentLevel;
+    compositeData.blocks.forEach(blockDef => {
+        const blockData = PREDEFINED_BLOCKS[blockDef.key];
+        if (!blockData) return;
+        const blockWidth = (blockDef.w ?? blockData.width) / state.scale.ratio;
+        const blockHeight = (blockDef.h ?? blockData.height) / state.scale.ratio;
+        const colors = BLOCK_CATEGORY_COLORS[blockData.category || 'default'];
+        const blockId = `SB-${state.serviceBlockCounter++}`;
+        const rect = new fabric.Rect({ width: blockWidth, height: blockHeight, fill: colors.fill, stroke: colors.stroke, strokeWidth: 2, originX: 'center', originY: 'center', strokeUniform: true });
+        const label = new fabric.Text(blockId, { fontSize: Math.min(blockWidth, blockHeight) * 0.2, fill: '#fff', backgroundColor: 'rgba(0,0,0,0.4)', originX: 'center', originY: 'center' });
+        
+        const x_px = (blockDef.x || 0) / state.scale.ratio;
+        const y_px = (blockDef.y || 0) / state.scale.ratio;
+
+        const subGroup = new fabric.Group([rect, label], {
+            isServiceBlock: true, blockData: { ...blockData }, blockId: blockId, level: compositeLevel,
+            left: x_px + blockWidth / 2, top: y_px + blockHeight / 2,
+            selectable: false, evented: false
+        });
+        
+        state.serviceBlocks.push(subGroup);
+        items.push(subGroup);
+    });
+    const compositeGroup = new fabric.Group(items, { left: pointer.x, top: pointer.y, level: compositeLevel, isCompositeGroup: true, compositeDefName: compositeData.name });
+    state.canvas.add(compositeGroup);
+    return compositeGroup;
 }

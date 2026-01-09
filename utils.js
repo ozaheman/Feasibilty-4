@@ -246,6 +246,37 @@ export function ensureCounterClockwise(points) {
     return points;
 }
 
+export function getPolygonFromPolyline(polylinePoints, thickness) {
+    if (!polylinePoints || polylinePoints.length < 2) return [];
+
+    const forwardPoints = [];
+    const backwardPoints = [];
+    
+    // Handle segments
+    for (let i = 0; i < polylinePoints.length - 1; i++) {
+        const p1 = polylinePoints[i];
+        const p2 = polylinePoints[i+1];
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const len = Math.hypot(dx, dy);
+        if (len === 0) continue;
+
+        const nx = -dy / len * (thickness / 2);
+        const ny = dx / len * (thickness / 2);
+
+        forwardPoints.push({ x: p1.x + nx, y: p1.y + ny });
+        backwardPoints.unshift({ x: p1.x - nx, y: p1.y - ny });
+        
+        if (i === polylinePoints.length - 2) { // Last segment
+            forwardPoints.push({ x: p2.x + nx, y: p2.y + ny });
+            backwardPoints.unshift({ x: p2.x - nx, y: p2.y - ny });
+        }
+    }
+    
+    return [...forwardPoints, ...backwardPoints];
+}
+
+
 // --- OBB ALGORITHMS (from ai_studio_code (28).html) ---
 
 function crossProduct(p1, p2, p3) {

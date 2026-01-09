@@ -1,3 +1,5 @@
+//--- START OF FILE parkingLayoutUtils.js ---
+
 
 // MODULE 7: PARKING LAYOUT (parkingLayout.js equivalent)
 // =====================================================================
@@ -113,13 +115,28 @@ export function generateLinearParking(startPt, endPt) {
     const objectsInRow = createParkingGeometry(lineLengthMeters, parkingType, rowType, totalBayCount, state.scale.ratio);
     
     if (objectsInRow.length > 0) {
+        // Create a temporary group to get bounds for centering
+        const tempGroup = new fabric.Group(objectsInRow);
+        const groupWidth = tempGroup.width;
+        const groupHeight = tempGroup.height;
+
+        // Adjust positions of all objects to be relative to the group's center
+        objectsInRow.forEach(obj => {
+            obj.left -= groupWidth / 2;
+            obj.top -= groupHeight / 2;
+        });
+        
+        const midPt = { x: (startPt.x + endPt.x) / 2, y: (startPt.y + endPt.y) / 2 };
+
         const group = new fabric.Group(objectsInRow, {
-            left: startPt.x, top: startPt.y,
+            left: midPt.x, 
+            top: midPt.y,
             angle: Math.atan2(dy, dx) * 180 / Math.PI,
-            originX: 'left', originY: 'top',
+            originX: 'center', 
+            originY: 'center',
             isParkingRow: true, level: state.currentLevel,
             parkingCount: totalBayCount, parkingParams: { parkingType, rowType },
-            lockScalingY: true, lockUniScaling: true,
+            lockScalingY: true, 
         });
         state.parkingRows.push(group);
         state.canvas.add(group);
@@ -133,10 +150,26 @@ export function regenerateParkingInGroup(group, scaleRatio) {
     const newWidthPixels = group.getScaledWidth();
     const newLineLengthMeters = newWidthPixels * scaleRatio;
     const newBayCount = calculateBaysForLength(newLineLengthMeters, params.parkingType) * (params.rowType === 'double' ? 2 : 1);
+    
+    // Remove old objects
     const objectsToRemove = group.getObjects().slice();
     objectsToRemove.forEach(obj => group.remove(obj));
+    
+    // Create new objects (positioned relative to 0,0 top-left)
     const newObjects = createParkingGeometry(newLineLengthMeters, params.parkingType, params.rowType, newBayCount, scaleRatio);
+    
+    // Center the new objects before adding them to the group
+    const tempGroup = new fabric.Group(newObjects);
+    const groupWidth = tempGroup.width;
+    const groupHeight = tempGroup.height;
+    newObjects.forEach(obj => {
+        obj.left -= groupWidth / 2;
+        obj.top -= groupHeight / 2;
+    });
+
+    // Add centered objects
     newObjects.forEach(obj => group.addWithUpdate(obj));
+
     group.set({ width: newWidthPixels, scaleX: 1, parkingCount: newBayCount });
     group.setCoords();
 }

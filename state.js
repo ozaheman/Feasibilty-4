@@ -1,3 +1,6 @@
+
+//--- START OF FILE state.js ---
+
 //--- START OF FILE state.js ---
 
 import { PROJECT_PROGRAMS } from './config.js';
@@ -52,6 +55,9 @@ const _state = {
     actionHistory: [],
      // NEW: For editable area statement
     manualAreaOverrides: {},
+    // NEW: For live drawing feedback
+    lastMousePointer: { x: 0, y: 0 },
+    liveDimensionLine: null,
 };
 
 export const state = _state;
@@ -104,6 +110,8 @@ export function resetState(keepObjects = false) {
         actionHistory: [],
          // NEW: Reset manual overrides
         manualAreaOverrides: {},
+        lastMousePointer: { x: 0, y: 0 },
+        liveDimensionLine: null,
     });
     if (!keepObjects) {
         if(_state.canvas) {

@@ -234,14 +234,11 @@
          <div style="font-size: 0.9em; margin-top: 5px;">
              <label><input type="checkbox" id="auto-place-core-check"> Auto-place Core on Footprint</label>
          </div>
-          <div class="button-grid" style="margin-bottom: 10px;">
-        <button id="export-blocks-csv-btn">Export CSV</button>
-        <label for="import-blocks-csv-upload" class="button">Import CSV</label>
-        <input type="file" id="import-blocks-csv-upload" accept=".csv" style="display:none;">
-    </div>
-    <div id="service-block-list" style="max-height: 200px; overflow-y: auto; background: #f9f9f9; padding: 5px; border-radius: 4px; font-size: 0.8em;">
-        <!-- List will be rendered here -->
-    </div>
+          <div class="button-grid" style="margin-bottom: 10px; margin-top:10px;">
+            <button id="export-blocks-csv-btn">Export CSV</button>
+            <label for="import-blocks-csv-upload" class="button">Import CSV</label>
+            <input type="file" id="import-blocks-csv-upload" accept=".csv" style="display:none;">
+        </div>
         <div class="button-grid-3" style="margin-top: 5px;">
             <button id="edit-composite-btn" class="warning">Edit</button>
             <button id="new-composite-btn" class="active">New</button>
@@ -369,21 +366,37 @@
         </div>
          <!-- NEW: Manual Area Statement Button -->
         <button id="area-statement-btn" style="margin-top: 5px;">View Area Statement</button>
+        
         <!-- NEW: PDF Report Detail Toggle -->
         <div id="report-detail-toggle" class="button-grid" style="font-size:0.9em; margin-top:5px;">
             <label><input type="radio" name="report-detail" value="full" checked> Full PDF</label>
             <label><input type="radio" name="report-detail" value="brief"> Brief PDF</label>
         </div>
+        <!-- NEW: PDF Layout Options -->
+        <div id="pdf-layout-controls">
+            <h4>PDF Layout Options</h4>
+            <div class="input-grid">
+                <div><label for="pdf-margin-top">Top Margin (mm)</label><input type="number" id="pdf-margin-top" value="30" min="10"></div>
+                <div><label for="pdf-margin-bottom">Bottom Margin (mm)</label><input type="number" id="pdf-margin-bottom" value="20" min="10"></div>
+            </div>
+            <div class="input-grid" style="margin-top: 5px;">
+                <div><label for="pdf-thumb-cols">Thumbs per Row</label><input type="number" id="pdf-thumb-cols" value="2" min="1" max="4"></div>
+                <div><label for="pdf-thumb-rows">Rows per Page</label><input type="number" id="pdf-thumb-rows" value="3" min="1" max="6"></div>
+            </div>
+        </div>
+
          <div id="layout-preview-controls" class="checkbox-grid" style="font-size: 0.9em; margin-top: 5px;">
             <label><input type="checkbox" id="show-balconies-check" checked> Show Balconies</label>
             <label><input type="checkbox" id="show-corridor-check" checked> Show Corridor</label>
               </div>
+              
         <div id="screenshot-gallery-wrapper">
              <h4>Include Level Plans in PDF</h4>
              <div id="screenshot-gallery-container">
                 <!-- Thumbnails will be populated here -->
              </div>
         </div>
+
         <div class="button-grid" style="margin-top: 10px;">
             <button id="generate3dBtn" disabled>Generate 3D Model</button>
             <button id="exportScadBtn" disabled>Export OpenSCAD</button>
@@ -438,7 +451,7 @@
         <div class="dash-row"><span>Est. Occupancy:</span> <span class="dash-val" id="dash-occupancy">0</span></div>
         <div class="dash-row"><span>Lifts (Req/Prov):</span> <span class="dash-val" id="dash-lifts-info">0 / 0</span></div>
         <div class="dash-row"><span>Stairs (Req/Prov):</span> <span class="dash-val" id="dash-stairs-info">0 / 0</span></div>
-
+        
         <div class="dash-row header">Utilities</div>
         <div class="dash-row"><span>Garbage Bins Req.:</span> <span class="dash-val" id="dash-garbage-req">0</span></div>
         <div class="dash-row"><span>Water Req:</span> <span class="dash-val" id="dash-water-req">0 m³/d</span></div>

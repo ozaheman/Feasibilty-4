@@ -393,3 +393,70 @@ td { padding: 4px; }
     border-radius: 4px;
     margin-bottom: 5px;
 }
+/* NEW: PDF Layout Controls Styling */
+#pdf-layout-controls {
+    font-size: 0.9em;
+    margin-top: 10px;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+}
+#pdf-layout-controls h4 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    font-size: 1em;
+    color: var(--secondary-color);
+}
+#pdf-layout-controls input[type="number"] {
+    padding: 6px;
+    margin-bottom: 0;
+}
+#pdf-layout-controls label {
+    margin-bottom: 2px;
+}
+/* NEW: Floating Cancel Button for Drawing */
+#cancel-drawing-btn {
+    position: absolute;
+    z-index: 10002;
+    width: 28px;
+    height: 28px;
+    background-color: var(--accent-color);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    border: 2px solid white;
+    transition: transform 0.1s ease;
+}
+#cancel-drawing-btn:hover {
+    transform: scale(1.1);
+}
+@media print {
+    .report-table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+    }
+    
+    .report-table th,
+    .report-table td {
+        border: 1px solid #ccc !important;
+        padding: 6px !important;
+    }
+    
+    tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+    }
+}
+
+/* Area Statement Modal Styles */
+#area-statement-modal .modal-content.wide {
+    max-height: 90vh;        /* Prevent modal from exceeding viewport */
+    overflow-y: auto;        /* Enable vertical scroll */
+    padding-right: 10px;     /* Avoid content hiding behind scrollbar */
+}
+

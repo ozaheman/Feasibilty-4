@@ -22,8 +22,10 @@ window.edgeSnapIndicator = null;
 window.isEditingGroup = false;
 window.groupBeingEdited = null;
 window.snapThreshold = 15; // Pixels for snapping
-
+window.addDrawingPoint=null;
 window.measurePoint1 = null;
+
+window.finalpolygonPoints = [];
 window.polygonPoints = [];
 window.isPanning =false;
 window.alignmentHighlight=null,

@@ -1,14 +1,14 @@
-
 //--- START OF FILE io.js ---
 
 // MODULE 11: IO (io.js equivalent)
 // =====================================================================
 import { state, resetState, setScale,rehydrateProgram  } from './state.js';
-import { handleFinishPolygon, createCompositeGroup  } from './eventHandlers.js';
+import { handleFinishPolygon } from './eventHandlers.js';
 import { zoomToObject, setCanvasBackground, renderPdfToBackground } from './canvasController.js';
 import { updateUI } from './uiController.js';
 import { PROJECT_PROGRAMS, PREDEFINED_BLOCKS, BLOCK_CATEGORY_COLORS } from './config.js';
 import { f } from './utils.js';
+import { placeServiceBlock, createCompositeGroup } from './drawingTools.js';
 
 export function downloadFile(filename, content, mimeType) {
     const blob = new Blob([content], { type: mimeType });
@@ -125,7 +125,7 @@ export function assignDxfAsPlot() {
 
     if (largestPoly) {
         const finalPolygon = new fabric.Polygon(largestPoly, { objectCaching: false });
-        handleFinishPolygon(finalPolygon, 'drawingPlot'); // Uses drawingTools function
+        handleFinishPolygon(finalPolygon, 'drawingPlot');
     }
     deleteDxf();
 }
@@ -152,15 +152,62 @@ export function deleteDxf() {
         state.canvas.renderAll();
     }
 }
-export function exportProjectZIP(canvas) {
+
+function generateServiceBlocksCSVString() {
+    if (state.serviceBlocks.length === 0 || state.scale.ratio === 0) {
+        return null;
+    }
+
+    let csvContent = "ID,Name,Level,Category,Area (sqm)\n";
+    const scaleSq = state.scale.ratio * state.scale.ratio;
+
+    const allBlocks = [];
+    state.serviceBlocks.forEach(block => {
+        if (block.isCompositeGroup) {
+            block.getObjects().forEach(subBlock => allBlocks.push(subBlock));
+        } else if (block.isServiceBlock) {
+            allBlocks.push(block);
+        }
+    });
+
+    allBlocks.forEach(block => {
+        if (block.blockData) {
+            const areaM2 = (block.getScaledWidth() * block.getScaledHeight()) * scaleSq;
+            const row = [
+                `"${block.blockId || 'N/A'}"`,
+                `"${block.blockData.name || 'Unnamed'}"`,
+                `"${block.level || 'Unassigned'}"`,
+                `"${block.blockData.category || 'default'}"`,
+                `${areaM2.toFixed(2)}`
+            ].join(',');
+            csvContent += row + "\n";
+        }
+    });
+    return csvContent;
+}
+
+async function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataUrl = reader.result;
+            const base64String = dataUrl.split(',')[1];
+            resolve(base64String);
+        };
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+    });
+}
+
+export async function exportProjectZIP(canvas) {
     const zip = new JSZip();
 
     // 1. Generate and add XML
     const doc = document.implementation.createDocument(null, "FeasibilityProject", null);
     const projectNode = doc.documentElement;
     const scaleNode = doc.createElement("Scale");
-    scaleNode.setAttribute("pixels", state.scale.pixels);
-    scaleNode.setAttribute("meters", state.scale.meters);
+    scaleNode.setAttribute("pixels", state.scale.pixelDistance);
+    scaleNode.setAttribute("meters", state.scale.realDistance);
     projectNode.appendChild(scaleNode);
     const paramsNode = doc.createElement("Parameters");
     paramsNode.setAttribute("projectType", state.projectType);
@@ -180,7 +227,6 @@ export function exportProjectZIP(canvas) {
     plotPropsNode.textContent = JSON.stringify(state.plotEdgeProperties);
     projectNode.appendChild(plotPropsNode);
     
-    // NEW: Add action history to XML
     const historyNode = doc.createElement("ActionHistory");
     historyNode.textContent = JSON.stringify(state.actionHistory);
     projectNode.appendChild(historyNode);
@@ -189,7 +235,7 @@ export function exportProjectZIP(canvas) {
     const objectsToExport = canvas.getObjects().filter(obj => !obj.isSnapPoint && !obj.isEdgeHighlight && !obj.isSnapIndicator);
     objectsToExport.forEach(obj => {
         const objNode = doc.createElement("Object");
-        const customProps = ['level', 'isServiceBlock', 'blockData', 'blockId', 'isPlot', 'isFootprint', 'isCompositeGroup', 'isParkingRow', 'parkingParams', 'parkingCount', 'isGuide', 'isDxfOverlay'];
+        const customProps = ['level', 'isServiceBlock', 'blockData', 'blockId', 'isPlot', 'isFootprint', 'isCompositeGroup', 'compositeDefName', 'isParkingRow', 'parkingParams', 'parkingCount', 'isGuide', 'isDxfOverlay'];
         const fabricData = obj.toObject(customProps);
         objNode.textContent = JSON.stringify(fabricData);
         canvasNode.appendChild(objNode);
@@ -201,37 +247,32 @@ export function exportProjectZIP(canvas) {
 
     // 2. Add Original Plan File
     if (state.originalPlanFile) {
-        zip.file(state.originalPlanFile.name, state.originalPlanFile);
+        if (state.originalPlanFile.name.toLowerCase().endsWith('.pdf')) {
+            try {
+                const base64String = await fileToBase64(state.originalPlanFile);
+                const baseName = state.originalPlanFile.name.replace(/\.[^/.]+$/, "");
+                zip.file(`${baseName}.b64`, base64String);
+            } catch (error) {
+                console.error("Error converting PDF to Base64:", error);
+            }
+        } else {
+            zip.file(state.originalPlanFile.name, state.originalPlanFile);
+        }
     }
 
     // 3. Add Original DXF Content
     if (state.originalDxfContent) {
         zip.file("overlay.dxf", state.originalDxfContent);
     }
-     // 4. NEW: Generate and add Service Block Area Statement CSV
-    if (state.serviceBlocks.length > 0 && state.scale.ratio > 0) {
-        let csvContent = "Block ID,Block Name,Level,Category,Area (sqm)\n";
-        state.serviceBlocks.forEach(block => {
-            if (block.blockData) {
-                const areaM2 = (block.getScaledWidth() * block.getScaledHeight()) * (state.scale.ratio * state.scale.ratio);
-                const row = [
-                    `"${block.blockId || 'N/A'}"`,
-                    `"${block.blockData.name || 'Unnamed'}"`,
-                    `"${block.level || 'Unassigned'}"`,
-                    `"${(block.blockData.category || 'default').toUpperCase()}"`,
-                    `${f(areaM2, 2).replace(/,/g, '')}` // Use f() but remove commas for CSV
-                ].join(',');
-                csvContent += row + "\n";
-            }
-        });
+     // 4. Generate and add Service Block Area Statement CSV
+    const csvContent = generateServiceBlocksCSVString();
+    if (csvContent) {
         zip.file("service_block_schedule.csv", csvContent);
     }
 
-    // 4. Generate and Download ZIP
-    zip.generateAsync({ type: "blob" })
-        .then(function(content) {
-            downloadFile("project.zip", content, "application/zip");
-        });
+    // 5. Generate and Download ZIP
+    const content = await zip.generateAsync({ type: "blob" });
+    downloadFile("project.zip", content, "application/zip");
 }
 
 export async function importProjectZIP(file, canvas, onComplete) {
@@ -240,12 +281,52 @@ export async function importProjectZIP(file, canvas, onComplete) {
         const xmlFile = zip.file("project.xml");
         if (!xmlFile) throw new Error("project.xml not found in the zip archive.");
         
+        canvas.clear();
+
+        // STEP 1: Load and render background plan first
+        const b64ZipObject = Object.values(zip.files).find(f => !f.dir && /\.b64$/i.test(f.name));
+        const pdfZipObject = Object.values(zip.files).find(f => !f.dir && /\.pdf$/i.test(f.name));
+        const imageZipObject = Object.values(zip.files).find(f => !f.dir && /\.(png|jpe?g)$/i.test(f.name));
+        
+        let pdfArrayBuffer = null;
+
+        if (b64ZipObject) {
+            // New Base64 format
+            const base64Content = await b64ZipObject.async("string");
+            const binaryString = window.atob(base64Content);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            pdfArrayBuffer = bytes.buffer;
+            
+            const originalPdfName = b64ZipObject.name.replace(/\.b64$/, ".pdf");
+            state.originalPlanFile = new File([pdfArrayBuffer], originalPdfName, { type: 'application/pdf' });
+
+        } else if (pdfZipObject) {
+            // Old binary PDF format for backward compatibility
+            pdfArrayBuffer = await pdfZipObject.async("arraybuffer");
+            state.originalPlanFile = new File([pdfArrayBuffer], pdfZipObject.name, { type: 'application/pdf' });
+
+        } else if (imageZipObject) {
+            // Image format
+            const blob = await imageZipObject.async("blob");
+            state.originalPlanFile = new File([blob], imageZipObject.name, { type: blob.type });
+            const dataUrl = URL.createObjectURL(state.originalPlanFile);
+            setCanvasBackground(dataUrl);
+        }
+
+        if (pdfArrayBuffer) {
+            window.currentPdfData = pdfArrayBuffer;
+            const pdfImg = await renderPdfToBackground(pdfArrayBuffer, 1);
+            if (pdfImg) setCanvasBackground(pdfImg);
+        }
+        
+        // STEP 2: Now that background is loaded, parse XML and set scale
         const xmlContent = await xmlFile.async("string");
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlContent, "application/xml");
         if (xmlDoc.getElementsByTagName("parsererror").length) throw new Error("XML parsing error.");
-        
-        canvas.clear();
         
         const scaleNode = xmlDoc.querySelector("Scale");
         if (scaleNode) {
@@ -254,6 +335,7 @@ export async function importProjectZIP(file, canvas, onComplete) {
             if (pixels > 0 && meters > 0) setScale(pixels, meters);
         }
         
+        // STEP 3: Restore all other settings from XML
         const plotPropsNode = xmlDoc.querySelector("PlotEdgeProperties");
         if (plotPropsNode && plotPropsNode.textContent) state.plotEdgeProperties = JSON.parse(plotPropsNode.textContent);
         
@@ -284,62 +366,61 @@ export async function importProjectZIP(file, canvas, onComplete) {
         const customBlocksNode = xmlDoc.querySelector("UserCompositeBlocks");
         if(customBlocksNode && customBlocksNode.textContent) state.userCompositeBlocks = JSON.parse(customBlocksNode.textContent);
 
-        // NEW: Load action history (replay logic would go here)
         const historyNode = xmlDoc.querySelector("ActionHistory");
-        if (historyNode && historyNode.textContent) {
-            state.actionHistory = JSON.parse(historyNode.textContent);
-            // NOTE: Full replay logic is complex and not implemented here.
-            // A full implementation would iterate through actionHistory and re-apply each action.
-            // For now, we will continue to load the final state of canvas objects.
-        }
+        if (historyNode && historyNode.textContent) state.actionHistory = JSON.parse(historyNode.textContent);
         
-        // The `enlivenObjects` function correctly restores Fabric objects along with their custom properties
-        // like `isPlot`, `isFootprint`, `level`, etc., which were saved during export.
-        // The callback in `handleImportZIP` will then iterate through these restored objects
-        // to repopulate the application's state variables (`state.plotPolygon`, `state.levels`, etc.).
+        // STEP 4: Process and interactively load canvas objects
         const objectNodes = xmlDoc.querySelectorAll("CanvasObjects > Object");
-        const fabricObjects = Array.from(objectNodes).map(node => JSON.parse(node.textContent));
+        const fabricObjectsData = Array.from(objectNodes).map(node => JSON.parse(node.textContent));
 
-        fabric.util.enlivenObjects(fabricObjects, async (enlivenedObjects) => {// Re-create composite groups correctly
-            const recreatedObjects = [];
-            const tempGroups = {};
+        let newBlockCounter = 0;
 
-            canvas.clear();
-            enlivenedObjects.forEach(obj => {
-                if (obj.isCompositeGroup) {
-                    // Ensure sub-objects are not selectable initially
-                    obj.forEachObject(subObj => subObj.set({selectable: false, evented: false}));
-                }
-                canvas.add(obj);
-            });
-            
-            const planFileRegex = /\.(pdf|png|jpe?g)$/i;
-            const planZipObject = Object.values(zip.files).find(f => !f.dir && planFileRegex.test(f.name));
-            if (planZipObject) {
-                const blob = await planZipObject.async("blob");
-                state.originalPlanFile = new File([blob], planZipObject.name, { type: blob.type });
+        for (const objData of fabricObjectsData) {
+            if (objData.isServiceBlock || objData.isCompositeGroup) {
+                const blockName = objData.isServiceBlock ? objData.blockData.name : objData.compositeDefName;
+                const userWantsToImport = confirm(`Import saved block '${blockName}'?\n\nClick 'Cancel' to create a new instance instead.`);
 
-                if (planZipObject.name.toLowerCase().endsWith('.pdf')) {
-                    const arrayBuffer = await planZipObject.async("arraybuffer");
-                    window.currentPdfData = arrayBuffer;
-                    const pdfImg = await renderPdfToBackground(arrayBuffer, 1);
-                    if (pdfImg) setCanvasBackground(pdfImg);
+                if (userWantsToImport) {
+                    await new Promise(resolve => fabric.util.enlivenObjects([objData], (enlivened) => {
+                        const obj = enlivened[0];
+                         if (obj.isCompositeGroup) {
+                            obj.forEachObject(subObj => subObj.set({selectable: false, evented: false}));
+                        }
+                        canvas.add(obj);
+                        resolve();
+                    }));
                 } else {
-                    const dataUrl = URL.createObjectURL(state.originalPlanFile);
-                    setCanvasBackground(dataUrl);
+                    const pos = { x: 50 + (newBlockCounter % 10) * 20, y: 50 + Math.floor(newBlockCounter / 10) * 20 };
+                    if (objData.isServiceBlock) {
+                        const blockKey = objData.blockData.key;
+                        if (blockKey && PREDEFINED_BLOCKS[blockKey]) {
+                            placeServiceBlock(pos, PREDEFINED_BLOCKS[blockKey], objData.level);
+                        }
+                    } else if (objData.isCompositeGroup) {
+                        const compositeDef = state.userCompositeBlocks.find(c => c.name === objData.compositeDefName);
+                        if (compositeDef) {
+                            createCompositeGroup(compositeDef, pos);
+                        }
+                    }
+                    newBlockCounter++;
                 }
+            } else {
+                 await new Promise(resolve => fabric.util.enlivenObjects([objData], (enlivened) => {
+                    canvas.add(enlivened[0]);
+                    resolve();
+                }));
             }
+        }
 
-            const dxfZipObject = zip.file("overlay.dxf");
-            if (dxfZipObject) {
-                const dxfText = await dxfZipObject.async("string");
-                state.originalDxfContent = dxfText;
-                parseAndDisplayDxf(dxfText);
-            }
+        const dxfZipObject = zip.file("overlay.dxf");
+        if (dxfZipObject) {
+            const dxfText = await dxfZipObject.async("string");
+            state.originalDxfContent = dxfText;
+            parseAndDisplayDxf(dxfText);
+        }
             
-            canvas.renderAll();
-            if (onComplete) onComplete();
-        });
+        canvas.renderAll();
+        if (onComplete) onComplete();
 
     } catch (error) {
         console.error("Failed to import ZIP:", error);
@@ -347,44 +428,16 @@ export async function importProjectZIP(file, canvas, onComplete) {
     }
 }
 
-// NEW: Function to export service blocks as a CSV file
 export function exportServiceBlocksCSV() {
-    if (state.serviceBlocks.length === 0 || state.scale.ratio === 0) {
+    const csvContent = generateServiceBlocksCSVString();
+    if (!csvContent) {
         document.getElementById('status-bar').textContent = 'No service blocks to export.';
         return;
     }
-
-    let csvContent = "ID,Name,Level,Category,Area (sqm)\n";
-    const scaleSq = state.scale.ratio * state.scale.ratio;
-
-    const allBlocks = [];
-    state.serviceBlocks.forEach(block => {
-        if (block.isCompositeGroup) {
-            block.getObjects().forEach(subBlock => allBlocks.push(subBlock));
-        } else if (block.isServiceBlock) {
-            allBlocks.push(block);
-        }
-    });
-
-    allBlocks.forEach(block => {
-        if (block.blockData) {
-            const areaM2 = (block.getScaledWidth() * block.getScaledHeight()) * scaleSq;
-            const row = [
-                `"${block.blockId || 'N/A'}"`,
-                `"${block.blockData.name || 'Unnamed'}"`,
-                `"${block.level || 'Unassigned'}"`,
-                `"${block.blockData.category || 'default'}"`,
-                `${areaM2.toFixed(2)}` // Keep it simple for CSV
-            ].join(',');
-            csvContent += row + "\n";
-        }
-    });
-
     downloadFile("service_block_schedule.csv", csvContent, "text/csv;charset=utf-8;");
     document.getElementById('status-bar').textContent = 'Service block schedule exported as CSV.';
 }
 
-// NEW: Function to import service blocks from a CSV file
 export function importServiceBlocksCSV(file, onComplete) {
     if (!file) return;
     if (state.scale.ratio === 0) {
@@ -401,7 +454,6 @@ export function importServiceBlocksCSV(file, onComplete) {
 
             const header = rows.shift().toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
 
-            // Find column indices
             const nameIndex = header.indexOf('name');
             const levelIndex = header.indexOf('level');
             const categoryIndex = header.indexOf('category');
@@ -411,51 +463,25 @@ export function importServiceBlocksCSV(file, onComplete) {
             }
             
             let blocksCreated = 0;
-            const placementStart = { x: 100, y: 100 }; // Default placement position
+            const placementStart = { x: 100, y: 100 };
 
             rows.forEach((row, rowIndex) => {
                 const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
                 const blockName = values[nameIndex];
                 const levelName = values[levelIndex];
-                const categoryName = categoryIndex > -1 ? values[categoryIndex] : 'default';
+                const categoryName = categoryIndex > -1 ? values[categoryIndex].toLowerCase() : 'default';
 
-                // Find the original block definition by name
                 const blockKey = Object.keys(PREDEFINED_BLOCKS).find(key => PREDEFINED_BLOCKS[key].name === blockName);
                 if (!blockKey) {
                     console.warn(`Could not find a predefined block named "${blockName}" from CSV row ${rowIndex + 1}. Skipping.`);
                     return;
                 }
 
-                const blockData = { ...PREDEFINED_BLOCKS[blockKey] }; // Create a copy
-                blockData.category = categoryName; // Override category if specified in CSV
+                const blockData = { ...PREDEFINED_BLOCKS[blockKey] };
+                blockData.category = categoryName;
 
-                // Create the block using similar logic to placeServiceBlock
-                const blockWidth = blockData.width / state.scale.ratio;
-                const blockHeight = blockData.height / state.scale.ratio;
-                const colors = BLOCK_CATEGORY_COLORS[blockData.category || 'default'];
-                const blockId = `SB-${state.serviceBlockCounter++}`;
-                
-                const rect = new fabric.Rect({ width: blockWidth, height: blockHeight, fill: colors.fill, stroke: colors.stroke, strokeWidth: 2, originX: 'center', originY: 'center', strokeUniform: true });
-                const label = new fabric.Text(blockId, { fontSize: Math.min(blockWidth, blockHeight) * 0.2, fill: '#fff', backgroundColor: 'rgba(0,0,0,0.4)', originX: 'center', originY: 'center' });
-                const lockIcon = new fabric.Text("🔒", { fontSize: Math.min(blockWidth, blockHeight) * 0.2, left: Math.min(blockWidth, blockHeight) * 0.2, originY: 'center', visible: true });
-                
-                const group = new fabric.Group([rect, label, lockIcon], {
-                    left: placementStart.x + (blocksCreated % 10) * 15, // Stagger placement
-                    top: placementStart.y + Math.floor(blocksCreated / 10) * 15,
-                    originX: 'center', 
-                    originY: 'center',
-                    isServiceBlock: true, 
-                    blockData: blockData, 
-                    blockId: blockId, 
-                    level: levelName, 
-                    selectable: true,
-                    evented: true,
-                    lockScalingX: true,
-                    lockScalingY: true,
-                });
-                
-                state.serviceBlocks.push(group);
-                state.canvas.add(group);
+                const pos = { x: placementStart.x + (blocksCreated % 10) * 20, y: placementStart.y + Math.floor(blocksCreated / 10) * 20 };
+                placeServiceBlock(pos, blockData, levelName);
                 blocksCreated++;
             });
 

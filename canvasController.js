@@ -1,3 +1,5 @@
+//--- START OF FILE canvasController.js ---
+
 // MODULE 4: CANVAS CONTROLLER (canvasController.js equivalent)
 // =====================================================================
 import { resetState,state,setCurrentMode,setScale   } from './state.js';
@@ -151,6 +153,49 @@ export function handleMouseWheelZoom(opt) {
 }
 export function getCanvas() { return state.canvas; }
 
+export function drawLiveDimension(p1, p2) {
+    if (!overlayCtx || !p1 || !p2 || state.scale.ratio === 0) return;
+
+    const distPixels = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (distPixels < 2) return;
+    const distMeters = distPixels * state.scale.ratio;
+    const text = `${distMeters.toFixed(2)} m`;
+
+    const midX = (p1.x + p2.x) / 2;
+    const midY = (p1.y + p2.y) / 2;
+    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+
+    const vpt = state.canvas.viewportTransform;
+    overlayCtx.save();
+    overlayCtx.setTransform(vpt[0], vpt[1], vpt[2], vpt[3], vpt[4], vpt[5]);
+
+    const textHeight = 14 / state.canvas.getZoom();
+    const padding = 5 / state.canvas.getZoom();
+    
+    overlayCtx.font = `${14 / state.canvas.getZoom()}px sans-serif`;
+    const textMetrics = overlayCtx.measureText(text);
+    const textWidth = textMetrics.width;
+
+    overlayCtx.translate(midX, midY);
+    overlayCtx.rotate(angle);
+    
+    if (angle < -Math.PI / 2 || angle > Math.PI / 2) {
+        overlayCtx.rotate(Math.PI);
+    }
+    
+    const textYOffset = -textHeight / 2 - padding * 2;
+
+    overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    const bgWidth = textWidth + 2 * padding;
+    const bgHeight = textHeight + 2 * padding;
+    overlayCtx.fillRect(-bgWidth / 2, textYOffset - bgHeight / 2, bgWidth, bgHeight);
+    
+    overlayCtx.fillStyle = 'white';
+    overlayCtx.textAlign = 'center';
+    overlayCtx.textBaseline = 'middle';
+    overlayCtx.fillText(text, 0, textYOffset);
+    overlayCtx.restore();
+}
 
 export function redrawApartmentPreview(layoutData) {
     const vpt =  state.canvas.viewportTransform;

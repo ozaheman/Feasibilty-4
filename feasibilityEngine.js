@@ -163,7 +163,7 @@ let calculatedTotalBua = 0;
 LEVEL_ORDER.forEach(levelKey => {
     const levelDef = LEVEL_DEFINITIONS[levelKey];
     const multiplier = levelDef.countKey ? (inputs[levelDef.countKey] || 0) : 1;
-    if (state.levels[levelKey].objects.length > 0 || getBlockDetails('gfa', levelKey).totalArea > 0 || getBlockDetails('service', levelKey).totalArea > 0) {
+    if (multiplier > 0 && (state.levels[levelKey].objects.length > 0 || getBlockDetails('gfa', levelKey).totalArea > 0 || getBlockDetails('service', levelKey).totalArea > 0)) {
         
         const nonLiftGfaArea = state.serviceBlocks
             .filter(b => b.level === levelKey && b.blockData && b.blockData.category === 'gfa' && !b.blockData.name.toLowerCase().includes('lift'))
@@ -182,15 +182,16 @@ LEVEL_ORDER.forEach(levelKey => {
             sellableGfa: 0,
             commonGfa: commonGfaForLevel,
             service: getAreaOfBlocksByCategory('service', levelKey),
-            parking: calculateNetParkingArea(levelKey), // This will now correctly return 0 for non-parking levels
+            parking: calculateNetParkingArea(levelKey),
             balconyTerrace: 0,
             total: 0
         };
 
         if (levelKey === 'Typical_Floor') {
-            item.sellableGfa = aptCalcs.totalSellableArea / (multiplier || 1);
-            item.commonGfa += corridorTotalArea;
-            item.balconyTerrace = aptCalcs.totalBalconyArea / (multiplier || 1);
+            const numFloors = multiplier || 1;
+            item.sellableGfa = aptCalcs.totalSellableArea / numFloors;
+            item.commonGfa += corridorTotalArea; // This is per floor
+            item.balconyTerrace = aptCalcs.totalBalconyArea / numFloors;
         } else if (levelKey === 'Hotel') {
             item.sellableGfa = achievedHotelGfa / (multiplier || 1);
         } else if (['Retail', 'Supermarket', 'Office', 'Commercial', 'Mezzanine'].includes(levelKey)) {
@@ -227,6 +228,8 @@ if (inputs['include-hotel-sellable']) totalSellable += areas.achievedHotelGfa;
 if (inputs['include-balcony-sellable']) totalSellable += aptCalcs.totalBalconyArea;
 
 const efficiency = (totalGfa > 0 ? (totalSellable / totalGfa * 100) : 0);
+const buaEfficiency = (calculatedTotalBua > 0 ? (totalSellable / calculatedTotalBua * 100) : 0);
+
 
 let commonAreaDetailsForReport = [];
 const allGfaBlockDetails = getBlockDetails('gfa').details;
@@ -347,7 +350,10 @@ const totalFloorsAboveGround = 1 + inputs.numMezzanines + inputs.numPodiums + in
 const garbageBinsRequired = Math.ceil(totalOccupancy / 100);
 
 const liftsRequired = RESIDENTIAL_PROGRAM.calculateLifts(totalOccupancy, totalFloorsAboveGround);
-const liftsProvided = state.serviceBlocks.filter(b => b.blockData && b.blockData.name.toLowerCase().includes('lift')).length;
+const liftsProvided = state.serviceBlocks.filter(b => b.blockData && b.blockData.name.toLowerCase().includes('lift') &&
+    !b.blockData.name.toLowerCase().includes("lift corridor") &&
+
+ (b.level === lowestGfaLiftLevel)).length;
 
 // NEW: Staircase Calculation
 const stairsRequired = state.currentProgram?.calculateStaircases ? state.currentProgram.calculateStaircases(totalOccupancy) : 2;
@@ -355,7 +361,7 @@ const stairsProvided = state.serviceBlocks.filter(b => b.level === 'Typical_Floo
 
 return {
     inputs, areas, aptCalcs, hotelCalcs,
-    summary: { totalGfa, totalBuiltup: calculatedTotalBua, totalSellable, efficiency, commonAreaDetails: commonAreaDetailsForReport },
+    summary: { totalGfa, totalBuiltup: calculatedTotalBua, totalSellable, efficiency, buaEfficiency, commonAreaDetails: commonAreaDetailsForReport },
     parking: { breakdown: parkingBreakdown, required: totalParkingReq, provided: parkingProvided, surplus: parkingProvided - totalParkingReq },
     lifts: { required: liftsRequired, provided: liftsProvided, surplus: liftsProvided - liftsRequired, totalOccupancy: totalOccupancy , gfaLevel: lowestGfaLiftLevel},
     staircases: { required: stairsRequired, provided: stairsProvided, surplus: stairsProvided - stairsRequired },
