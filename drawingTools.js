@@ -515,6 +515,8 @@ switch (state.currentMode) {
                     const includeBalconiesInOffset = balconyPlacement === 'recessed';
                     
                     liveLayoutData = layoutFlatsOnPolygon(tempFabricShape, counts, includeBalconiesInOffset, calcMode, doubleLoaded);
+                    console.log('liveLayoutData');
+                    console.log(liveLayoutData);
                     
                     if (liveLayoutData?.corridorArea > 0) {
                         statusText += ` | Est. Corridor: ${f(liveLayoutData.corridorArea)} m²`;
@@ -528,6 +530,8 @@ switch (state.currentMode) {
 }
 
 state.livePreviewLayout = liveLayoutData;
+console.log('state.livePreviewLayout');
+console.log(state.livePreviewLayout);
 if (liveUnitCounts) updateParkingDisplay(liveUnitCounts);
 state.canvas.requestRenderAll();
 return { liveLayoutData, liveUnitCounts };

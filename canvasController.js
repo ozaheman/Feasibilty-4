@@ -1,3 +1,5 @@
+// --- START OF FILE canvasController.js ---
+
 //--- START OF FILE canvasController.js ---
 
 // MODULE 4: CANVAS CONTROLLER (canvasController.js equivalent)
@@ -198,6 +200,8 @@ export function drawLiveDimension(p1, p2) {
 }
 
 export function redrawApartmentPreview(layoutData) {
+    console.log('redrawApartmentPreview');
+    console.log(layoutData);
     const vpt =  state.canvas.viewportTransform;
     overlayCtx.save();
     overlayCtx.setTransform(vpt[0], vpt[1], vpt[2], vpt[3], vpt[4], vpt[5]);
@@ -270,6 +274,18 @@ export function redrawApartmentPreview(layoutData) {
             overlayCtx.strokeRect(-balconyWidthPx / 2, -balconyDepthPx / 2, balconyWidthPx, balconyDepthPx);
             overlayCtx.restore();
         }
+        
+        // Draw the normal vector for debugging/visualization
+        const normalLength = 20 / state.canvas.getZoom();
+        const normalX = -Math.sin(flat.angle) * normalLength;
+        const normalY = Math.cos(flat.angle) * normalLength;
+
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(flat.center.x, flat.center.y);
+        overlayCtx.lineTo(flat.center.x + normalX, flat.center.y + normalY);
+        overlayCtx.strokeStyle = 'blue';
+        overlayCtx.lineWidth = 2 / state.canvas.getZoom();
+        overlayCtx.stroke();
     }
     overlayCtx.restore();
 }
