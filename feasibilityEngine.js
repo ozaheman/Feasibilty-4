@@ -93,16 +93,24 @@ if (state.projectType === 'Residential' && state.currentProgram && typicalFootpr
             });
         }
     } else if (gfaAvailableForResidential > 0) {
-        const totalPerimeter = typicalFootprints.reduce((sum, poly) => sum + getPolygonProperties(poly).perimeter, 0);
+        const totalPerimeter = typicalFootprints.reduce((sum, poly) =>{
+            //sum + getPolygonProperties(poly).perimeter, 0);
+          let p = getPolygonProperties(poly).perimeter;
+            if (poly.isLinearFootprint) p /= 2;
+            return sum + p;
+        }, 0);
 
         typicalFootprints.forEach((footprint, index) => {
-            const wingPerimeter = getPolygonProperties(footprint).perimeter;
+            //const wingPerimeter = getPolygonProperties(footprint).perimeter;
+             const footprintProps = getPolygonProperties(footprint);
+            let wingPerimeter = footprint.isLinearFootprint ? footprintProps.perimeter / 2 : footprintProps.perimeter;
             const perimeterRatio = totalPerimeter > 0 ? wingPerimeter / totalPerimeter : (1 / typicalFootprints.length);
             
             const wingGfaTarget = gfaAvailableForResidential * perimeterRatio;
             const wingAptAreaPerFloor = wingGfaTarget > 0 && inputs.numTypicalFloors > 0 ? wingGfaTarget / inputs.numTypicalFloors : 0;
 
-            const bestFit = findBestFit(wingAptAreaPerFloor, wingPerimeter, program.unitTypes);
+            //const bestFit = findBestFit(wingAptAreaPerFloor, wingPerimeter, program.unitTypes);
+            const bestFit = findBestFit(wingAptAreaPerFloor, wingPerimeter, program.unitTypes, doubleLoaded);
             
             const wingCounts = program.unitTypes.map(apt => ({
                 key: apt.key, type: apt.type,

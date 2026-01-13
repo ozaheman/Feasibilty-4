@@ -150,6 +150,42 @@ export function setupEventListeners() {
     document.getElementById('confirm-footprint-btn').addEventListener('click', confirmFootprintEdit);
     document.getElementById('delete-footprint-btn').addEventListener('click', deleteSelectedObject);
     document.getElementById('plan-upload').addEventListener('change', handlePlanUpload);
+
+    const uploadLabel = document.querySelector('label[for="plan-upload"]');
+    if (uploadLabel) {
+        // Prevent default browser behavior to allow drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadLabel.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, false);
+        });
+
+        // Add visual feedback for drag-over
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadLabel.addEventListener(eventName, () => {
+                uploadLabel.style.backgroundColor = '#f50057'; // Use accent color
+                uploadLabel.style.border = '2px dashed white';
+            }, false);
+        });
+
+        // Remove visual feedback
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadLabel.addEventListener(eventName, () => {
+                uploadLabel.style.backgroundColor = ''; // Revert to default
+                uploadLabel.style.border = '';
+            }, false);
+        });
+
+        // Handle the file drop
+        uploadLabel.addEventListener('drop', (e) => {
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                // Pass the dropped files to the existing upload handler
+                handlePlanUpload({ target: { files: e.dataTransfer.files } });
+            }
+        });
+    }
+
     document.getElementById('pdf-page').addEventListener('change', handlePdfPageChange);
     document.getElementById('set-scale-btn').addEventListener('click', () => {
         if (state.currentMode === 'scaling') {
@@ -784,7 +820,12 @@ export function handleMouseDown(o) {
     }
     const result = handleCanvasMouseDown(pointer);
     if (result?.action === 'finishPolygon') {
+        alert('finishPolygon');
         handleFinishPolygon(result.polygon);
+    }
+     if (result?.action === 'finishPolyline') {
+        alert('finishPolyline');
+        handleFinishPolyline(result.polyline);
     }
     if (state.currentMode === 'placingBlock') placeServiceBlock(pointer);
     if (state.currentMode === 'placingCompositeBlock') {
@@ -888,20 +929,15 @@ export function  handleObjectModified(e) {
     if (target.isFootprint && state.currentLevel === 'Typical_Floor' && state.projectType === 'Residential' && state.currentProgram) {
         const program = state.currentProgram;
         
-        // Handle perimeter for both Polygon and Polyline (Linear)
         let tempPerimeter = 0;
-        if (target.points) {
-            if (target.type === 'polyline') {
-                // Manually calc length for polyline
-                for (let i = 0; i < target.points.length - 1; i++) {
-                    const p1 = target.points[i];
-                    const p2 = target.points[i+1];
-                    tempPerimeter += Math.hypot(p2.x - p1.x, p2.y - p1.y);
-                }
-                tempPerimeter *= state.scale.ratio; // Scale
-            } else {
-                tempPerimeter = getPolygonProperties(target).perimeter;
-            }
+        const props = getPolygonProperties(target);
+
+        if (target.isLinearFootprint) {
+            // A linear footprint is a thin polygon. Its "length" is roughly half its perimeter.
+            tempPerimeter = props.perimeter / 2;
+        } else {
+            // A standard closed footprint or a polyline (during drawing). Use its perimeter/length directly.
+            tempPerimeter = props.perimeter;
         }
 
         const totalMix = program.unitTypes.reduce((sum, unit) => sum + unit.mix, 0) || 1;
@@ -1307,7 +1343,83 @@ export function  handleFinishPolygon(shape, modeOverride = null) {
         state.plotEdgeProperties = finalShape.points.map(() => ({ distance: 5, direction: 'inside' }));
     } else if (currentMode === 'drawingBuilding' || isLinearFootprint) {
         const levelData = state.levels[state.currentLevel];
-        finalShape.set({ fill: levelData.color, stroke: 'red', level: state.currentLevel, selectable: true, evented: true, isFootprint: true, strokeUniform: true });
+        const footprintProps = {
+            fill: levelData.color,
+            stroke: 'red',
+            level: state.currentLevel,
+            selectable: true,
+            evented: true,
+            isFootprint: true,
+            strokeUniform: true,
+            isLinearFootprint: isLinearFootprint // Add the flag here
+        };
+        finalShape.set(footprintProps);
+        levelData.objects.push(finalShape);
+        updateLevelFootprintInfo();
+        
+        if (finalShape.type === 'polygon' && document.getElementById('auto-place-core-check').checked) {
+            const coreForLevel = state.userCompositeBlocks.find(core => core.level === state.currentLevel || core.name.toLowerCase().includes(state.currentLevel.toLowerCase().replace('_', ' ')));
+            if (coreForLevel) {
+                const coreIndex = state.userCompositeBlocks.indexOf(coreForLevel);
+                document.getElementById('composite-block-select').value = coreIndex;
+                createCompositeGroup(coreForLevel, finalShape.getCenterPoint());
+            } else {
+                const selectedIndex = document.getElementById('composite-block-select').value;
+                const selectedData = state.userCompositeBlocks[selectedIndex];
+                if (selectedData) { createCompositeGroup(selectedData, finalShape.getCenterPoint()); }
+            }
+        }
+    }
+    state.canvas.add(finalShape);
+    
+    if (isLinearFootprint) {
+        document.getElementById('previewLayoutBtn').classList.add('active');
+        document.getElementById('previewLayoutBtn').textContent = 'Hide Preview';
+        state.canvas.requestRenderAll();
+        exitAllModes(); 
+    } else {
+        state.canvas.renderAll();
+        exitAllModes();
+    }
+}
+export function  handleFinishPolyline(shape, modeOverride = null) {
+    let finalShape = shape;
+    const currentMode = modeOverride || state.currentMode;
+    const isLinearFootprint = currentMode === 'drawingLinearBuilding';
+    
+   /*  if (isLinearFootprint) {
+        const avgUnitDepth = state.currentProgram?.unitTypes.reduce((acc, u) => acc + u.depth, 0) / state.currentProgram.unitTypes.length || 14;
+        const thickness = (avgUnitDepth / state.scale.ratio);
+        const polyPoints = getPolygonFromPolyline(shape.points, thickness);
+        finalShape = new fabric.Polyline(polyPoints, { selectable: false, evented: false, objectCaching: false });
+    } */
+
+    // For linear footprints, we want to immediately trigger the preview
+    if (isLinearFootprint && state.livePreviewLayout) {
+        state.currentApartmentLayout = state.livePreviewLayout;
+    }
+    state.livePreviewLayout = null;
+
+    recordAction('FINISH_POLYLINE', { shape: finalShape.toObject(), mode: currentMode, level: state.currentLevel });
+
+    if (currentMode === 'drawingPlot') {
+        if (state.plotPolygon) state.canvas.remove(state.plotPolygon);
+        state.plotPolygon = finalShape;
+        finalShape.set({ fill: 'rgba(0, 0, 255, 0.1)', stroke: 'rgba(0, 0, 255, 0.6)', strokeWidth: 1.5, level: 'Plot', selectable: false, evented: false, isPlot: true, strokeUniform: true });
+        state.plotEdgeProperties = finalShape.points.map(() => ({ distance: 5, direction: 'inside' }));
+    } else if (currentMode === 'drawingBuilding' || isLinearFootprint) {
+        const levelData = state.levels[state.currentLevel];
+        const footprintProps = {
+            fill: levelData.color,
+            stroke: 'red',
+            level: state.currentLevel,
+            selectable: false,
+            evented: true,
+            isFootprint: true,
+            strokeUniform: true,
+            isLinearFootprint: isLinearFootprint // Add the flag here
+        };
+        finalShape.set(footprintProps);
         levelData.objects.push(finalShape);
         updateLevelFootprintInfo();
         

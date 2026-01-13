@@ -8,7 +8,7 @@ import { pointToLineSegmentDistance,getLineIntersection,allocateCountsByPercent,
 import { initUI, updateUI,applyLevelVisibility,updateLevelFootprintInfo , updateParkingDisplay,updateMixTotal } from './uiController.js';
 // REMOVED: import { exitAllModes, handleFinishPolygon, handleObjectModified, handleDblClick } from './eventHandlers.js';
 // IMPORT only what is needed, and NOT handleDblClick
-import { exitAllModes, handleFinishPolygon, handleObjectModified } from './eventHandlers.js';
+import { exitAllModes, handleFinishPolygon,handleFinishPolyline, handleObjectModified } from './eventHandlers.js';
 import { generateLinearParking } from './parkingLayoutUtils.js';
 import { PREDEFINED_BLOCKS, BLOCK_CATEGORY_COLORS } from '../config.js';
 
@@ -432,6 +432,9 @@ switch (state.currentMode) {
             resetDrawingState();
             return { action: 'finishPolygon', polygon: finalPolygon };
         }
+        if (state.currentMode == 'drawingLinearBuilding' && polygonPoints.length > 2){const finalPolyline = new fabric.Polyline(finalpolygonPoints, { selectable: false, evented: false, objectCaching: false });
+            resetDrawingState();
+            return { action: 'finishPolyline', polyline: finalPolyline };}
        finalpolygonPoints.push({ x: pointer.x, y: pointer.y });
         addDrawingPoint({ x: pointer.x, y: pointer.y });
         break;
@@ -530,8 +533,8 @@ switch (state.currentMode) {
 }
 
 state.livePreviewLayout = liveLayoutData;
-console.log('state.livePreviewLayout');
-console.log(state.livePreviewLayout);
+//console.log('state.livePreviewLayout');
+//console.log(state.livePreviewLayout);
 if (liveUnitCounts) updateParkingDisplay(liveUnitCounts);
 state.canvas.requestRenderAll();
 return { liveLayoutData, liveUnitCounts };
@@ -563,10 +566,14 @@ export function handleDblClick(o) {
         if (pLast && pPrev && Math.hypot(pLast.x - pPrev.x, pLast.y - pPrev.y) < 2) {
             polygonPoints.pop();
         }
+        console.log('polygonPoints.pop()');
+        console.log(polygonPoints.pop());
         const finalShape = state.currentMode === 'drawingLinearBuilding' ?
             new fabric.Polyline(polygonPoints, { selectable: false, evented: false, objectCaching: false, fill: 'transparent' }) :
             new fabric.Polygon(polygonPoints, { selectable: false, evented: false, objectCaching: false });
         resetDrawingState();
+        console.log('final shape in drawing tool.js->handle dblclick:');
+        console.log(finalShape);
         handleFinishPolygon(finalShape);
     }
 }

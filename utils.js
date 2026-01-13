@@ -103,8 +103,9 @@ export function orthogonalizePolygon(points) {
     }, [rotatedPoints[0]]);
     return orthoPoints.map(p => rotate(p, dominantAngle, center));
 }
-export function findBestFit(targetArea, targetPerimeter, types) {
+export function findBestFit(targetArea, targetPerimeter, types, doubleLoaded = false) {
     let bestFit = { units: 0, counts: {}, area: 0, frontage: 0 };
+     const effectivePerimeter = doubleLoaded ? targetPerimeter * 2 : targetPerimeter;
     for (let n = 200; n > 0; n--) {
         const counts = allocateCountsByPercent(n, types);
         let usedArea = 0, usedFrontage = 0;
@@ -112,7 +113,8 @@ export function findBestFit(targetArea, targetPerimeter, types) {
             usedArea += (t.area || 0) * (counts[t.key] || 0);
             usedFrontage += (t.frontage || 0) * (counts[t.key] || 0);
         });
-        if (usedArea <= targetArea && usedFrontage <= targetPerimeter) {
+        //f (usedArea <= targetArea && usedFrontage <= targetPerimeter) {
+            if (usedArea <= targetArea && usedFrontage <= effectivePerimeter) {
             bestFit = { units: n, counts, area: usedArea, frontage: usedFrontage };
             break;
         }

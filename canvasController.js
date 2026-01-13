@@ -200,8 +200,8 @@ export function drawLiveDimension(p1, p2) {
 }
 
 export function redrawApartmentPreview(layoutData) {
-    console.log('redrawApartmentPreview');
-    console.log(layoutData);
+    //console.log('redrawApartmentPreview');
+    //console.log(layoutData);
     const vpt =  state.canvas.viewportTransform;
     overlayCtx.save();
     overlayCtx.setTransform(vpt[0], vpt[1], vpt[2], vpt[3], vpt[4], vpt[5]);

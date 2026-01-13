@@ -1,4 +1,3 @@
-
 import { state} from './state.js';
 import { ensureCounterClockwise,getOffsetPolygon,getPolygonAreaFromPoints, getPolygonBoundingBox, getPolygonProperties, getOBB    } from './utils.js';
 import { updateDashboard } from './uiController.js';
@@ -13,7 +12,7 @@ export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = t
         return { placedFlats: [], outerCorridorPolyPoints: [], innerCorridorPolyPoints: [], corridorArea: 0, corridorPoly: null, staircaseValidation: { valid: true, message: "No program."} };
     }
 
-    const isClosed = poly.type === 'polygon';
+    const isClosed = poly.type === 'polygon' && !poly.isLinearFootprint;
     // Ensure we are working with the point array
     let ccwPolyPoints = poly.points;
     if (isClosed) {
@@ -214,21 +213,11 @@ export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = t
                     
                     let unitOffsetPx, balconyOffsetPx;
                     
-                  /*   if (includeBalconiesInOffset) { 
+                    if (includeBalconiesInOffset) { 
                         balconyOffsetPx = (balconyDepth / 2) / state.scale.ratio;
                         unitOffsetPx = (balconyDepth + unitDepth / 2) / state.scale.ratio;
                     } else { 
                         balconyOffsetPx = (-balconyDepth / 2) / state.scale.ratio;
-                        unitOffsetPx = (unitDepth / 2) / state.scale.ratio;
-                    } */
-                    
-                      if (includeBalconiesInOffset) { 
-                      //alert('ok1');
-                        balconyOffsetPx = ((balconyDepth / 2)+unitDepth) / state.scale.ratio;
-                        unitOffsetPx = (balconyDepth + unitDepth / 2) / state.scale.ratio;
-                    } else { 
-                    //alert('ok2');
-                        balconyOffsetPx = ((balconyDepth+unitDepth+unitDepth) / 2) / state.scale.ratio;
                         unitOffsetPx = (unitDepth / 2) / state.scale.ratio;
                     }
 
@@ -268,8 +257,7 @@ export function  layoutFlatsOnPolygon(poly, counts, includeBalconiesInOffset = t
 
     const corridorArea = isClosed ? Math.max(0, outerArea - innerArea) : outerArea;
     const staircaseValidation = validateStaircaseDistance(finalPlacedFlats);
-    //alert(finalPlacedFlats);
-    //alert(corridorArea);
+
     return { 
         placedFlats: finalPlacedFlats, 
         outerCorridorPolyPoints, 

@@ -139,18 +139,27 @@ export function updateLiveApartmentCalc() {
         container.innerHTML = '';
         return;
     }
-
+const doubleLoaded = document.getElementById('double-loaded-corridor').checked;
     let html = '<div class="dash-row header">Live Unit Estimate (per Floor)</div>';
     let totalUnits = 0;
 
     typicalFootprints.forEach((footprint, index) => {
-        const perimeter = getPolygonProperties(footprint).perimeter;
-        const estimatedUnits = Math.floor(perimeter / avgFrontage);
+         const props = getPolygonProperties(footprint);
+        let effectivePerimeter = props.perimeter;
+
+        if (footprint.isLinearFootprint) {
+            effectivePerimeter /= 2; // Approximate length from thin polygon's perimeter
+        }
+        if (doubleLoaded) {
+            effectivePerimeter *= 2;
+        }
+
+         const estimatedUnits = Math.floor(effectivePerimeter / avgFrontage);
         totalUnits += estimatedUnits;
         html += `<div class="wing-row"><span>Wing ${index + 1}:</span> <b>${fInt(estimatedUnits)} units</b></div>`;
     });
 
-    if (typicalFootprints.length > 1) {
+    if (typicalFootprints.length > 1 || doubleLoaded) {
         html += `<div class="wing-total"><span>Total Est. Units:</span> <b>${fInt(totalUnits)} units</b></div>`;
     }
     
@@ -185,6 +194,7 @@ export function updateLevelFootprintInfo() {
     
     if (state.currentLevel === 'Typical_Floor' && state.lastCalculatedData && state.projectType === 'Residential') {
         let totalCorridorArea = 0;
+        let totalCorridorLength = 0;
         const counts = state.lastCalculatedData.aptCalcs.aptMixWithCounts.reduce((acc, apt) => ({ ...acc, [apt.key]: apt.countPerFloor }), {});
         const calcMode = document.getElementById('apartment-calc-mode').value;
         const doubleLoaded = document.getElementById('double-loaded-corridor').checked;
