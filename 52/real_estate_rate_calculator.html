@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dubai Property Market Overview</title>
+
+    <!-- LeafletJS CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+    <!-- Custom CSS -->
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #e9ecef;
+        }
+        .controls-panel {
+            flex: 1;
+            min-width: 400px;
+            max-width: 450px;
+            padding: 25px;
+            background-color: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        #map {
+            flex: 3;
+            height: 100%;
+            cursor: crosshair;
+        }
+        h1 {
+            margin-top: 0;
+            color: #343a40;
+            font-size: 1.8em;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .form-group { margin-bottom: 20px; }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover { background-color: #0056b3; }
+
+        /* Results Area Styling */
+        .results-area {
+            margin-top: 20px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        #resultsMessage {
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 1.1em;
+            color: #495057;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #resultsTableContainer {
+            display: none;
+            margin-top: 15px;
+            overflow-y: auto;
+        }
+        #resultsTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95em;
+        }
+        #resultsTable th, #resultsTable td {
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            text-align: left;
+        }
+        #resultsTable th {
+            background-color: #007bff;
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        #resultsTable tbody tr:nth-child(even) { background-color: #f2f2f2; }
+        #resultsTable td:nth-child(2), #resultsTable td:nth-child(3) {
+            text-align: right;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Left Panel for Controls and Results -->
+    <div class="controls-panel">
+        <div> <!-- Top section for controls -->
+            <h1>Dubai Property Overview</h1>
+            <p style="font-size: 0.9em; color: #6c757d; margin-top: -10px; margin-bottom: 20px;">Click the map or use the controls to select a location.</p>
+            
+            <div class="form-group">
+                <label for="searchBar">Quick Search Location</label>
+                <input type="text" id="searchBar" placeholder="e.g., Marina, Downtown, JVC...">
+            </div>
+
+            <div class="form-group">
+                <label for="locationSelect">Select Location</label>
+                <select id="locationSelect" size="8"></select>
+            </div>
+            
+            <button id="getRatesButton">Get Live Rates</button>
+        </div>
+        
+        <!-- Bottom section for results table -->
+        <div class="results-area">
+            <div id="resultsMessage">
+                <p>Select a location to see estimated market rates.</p>
+            </div>
+            <div id="resultsTableContainer">
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Property Type</th>
+                            <th>Buying Price (AED)</th>
+                            <th>Annual Rent (AED)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Panel for the Map -->
+    <div id="map"></div>
+
+    <!-- LeafletJS JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Custom JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- 1. DATA: Comprehensive and sorted list of Dubai locations ---
+            const locations = [
+                { id: 'al_barari', name: 'Al Barari', lat: 25.0934, lng: 55.3341 },
+                { id: 'al_barsha', name: 'Al Barsha', lat: 25.1165, lng: 55.2069 },
+                { id: 'al_furjan', name: 'Al Furjan', lat: 25.0311, lng: 55.1506 },
+                { id: 'al_garhoud', name: 'Al Garhoud', lat: 25.2458, lng: 55.3456 },
+                { id: 'al_jaddaf', name: 'Al Jaddaf', lat: 25.2227, lng: 55.3318 },
+                { id: 'al_karama', name: 'Al Karama', lat: 25.2471, lng: 55.3055 },
+                { id: 'al_satwa', name: 'Al Satwa', lat: 25.2155, lng: 55.2709 },
+                { id: 'arabian_ranches', name: 'Arabian Ranches', lat: 25.0503, lng: 55.2526 },
+                { id: 'arabian_ranches_2', name: 'Arabian Ranches 2', lat: 25.0431, lng: 55.2758 },
+                { id: 'arjan', name: 'Arjan', lat: 25.0682, lng: 55.2250 },
+                { id: 'barsha_heights', name: 'Barsha Heights (TECOM)', lat: 25.0945, lng: 55.1735 },
+                { id: 'bluewaters', name: 'Bluewaters Island', lat: 25.0805, lng: 55.1235 },
+                { id: 'bur_dubai', name: 'Bur Dubai', lat: 25.2593, lng: 55.2974 },
+                { id: 'business_bay', name: 'Business Bay', lat: 25.1852, lng: 55.2676 },
+                { id: 'city_walk', name: 'City Walk', lat: 25.2078, lng: 55.2644 },
+                { id: 'damac_hills', name: 'DAMAC Hills', lat: 25.0450, lng: 55.2442 },
+                { id: 'damac_hills_2', name: 'DAMAC Hills 2', lat: 25.0401, lng: 55.4217 },
+                { id: 'deira', name: 'Deira', lat: 25.2631, lng: 55.3377 },
+                { id: 'difc', name: 'DIFC', lat: 25.2131, lng: 55.2818 },
+                { id: 'discovery_gardens', name: 'Discovery Gardens', lat: 25.0416, lng: 55.1408 },
+                { id: 'downtown_dubai', name: 'Downtown Dubai', lat: 25.1972, lng: 55.2744 },
+                { id: 'dubai_creek_harbour', name: 'Dubai Creek Harbour', lat: 25.2100, lng: 55.3470 },
+                { id: 'dubai_hills_estate', name: 'Dubai Hills Estate', lat: 25.1119, lng: 55.2618 },
+                { id: 'dubai_investment_park', name: 'Dubai Investment Park (DIP)', lat: 24.9818, lng: 55.1923 },
+                { id: 'dubai_marina', name: 'Dubai Marina', lat: 25.0783, lng: 55.1399 },
+                { id: 'dubai_silicon_oasis', name: 'Dubai Silicon Oasis', lat: 25.1215, lng: 55.3884 },
+                { id: 'dubai_south', name: 'Dubai South', lat: 24.9123, lng: 55.2023 },
+                { id: 'dubai_sports_city', name: 'Dubai Sports City', lat: 25.0503, lng: 55.2205 },
+                { id: 'emaar_beachfront', name: 'Emaar Beachfront', lat: 25.0933, lng: 55.1481 },
+                { id: 'emirates_hills', name: 'Emirates Hills', lat: 25.0772, lng: 55.1819 },
+                { id: 'international_city', name: 'International City', lat: 25.1685, lng: 55.4093 },
+                { id: 'jbr', name: 'Jumeirah Beach Residence (JBR)', lat: 25.0768, lng: 55.1328 },
+                { id: 'jge', name: 'Jumeirah Golf Estates (JGE)', lat: 25.0305, lng: 55.2118 },
+                { id: 'jlt', name: 'Jumeirah Lake Towers (JLT)', lat: 25.0664, lng: 55.1413 },
+                { id: 'jumeirah_1', name: 'Jumeirah 1', lat: 25.2312, lng: 55.2589 },
+                { id: 'jvc', name: 'Jumeirah Village Circle (JVC)', lat: 25.0531, lng: 55.2038 },
+                { id: 'jvt', name: 'Jumeirah Village Triangle (JVT)', lat: 25.0518, lng: 55.1834 },
+                { id: 'meydan_city', name: 'Meydan City', lat: 25.1667, lng: 55.3000 },
+                { id: 'mira', name: 'Mira', lat: 25.0117, lng: 55.2936 },
+                { id: 'mirdif', name: 'Mirdif', lat: 25.2136, lng: 55.4192 },
+                { id: 'motor_city', name: 'Motor City', lat: 25.0505, lng: 55.2393 },
+                { id: 'mudon', name: 'Mudon', lat: 25.0342, lng: 55.2639 },
+                { id: 'oud_metha', name: 'Oud Metha', lat: 25.2378, lng: 55.3134 },
+                { id: 'palm_jumeirah', name: 'Palm Jumeirah', lat: 25.1189, lng: 55.1393 },
+                { id: 'port_de_la_mer', name: 'Port de La Mer', lat: 25.2536, lng: 55.2655 },
+                { id: 'ras_al_khor', name: 'Ras Al Khor', lat: 25.1900, lng: 55.3567 },
+                { id: 'remraam', name: 'Remraam', lat: 25.0210, lng: 55.2345 },
+                { id: 'the_greens', name: 'The Greens', lat: 25.0883, lng: 55.1764 },
+                { id: 'the_lakes', name: 'The Lakes', lat: 25.0792, lng: 55.1747 },
+                { id: 'the_meadows', name: 'The Meadows', lat: 25.0617, lng: 55.1736 },
+                { id: 'the_springs', name: 'The Springs', lat: 25.0569, lng: 55.1764 },
+                { id: 'the_villa', name: 'The Villa', lat: 25.1053, lng: 55.3533 },
+                { id: 'town_square', name: 'Town Square', lat: 25.0069, lng: 55.2789 },
+                { id: 'umm_suqeim', name: 'Umm Suqeim', lat: 25.1583, lng: 55.2078 },
+                { id: 'villanova', name: 'Villanova', lat: 25.0526, lng: 55.3341 },
+                { id: 'world_trade_centre', name: 'World Trade Centre', lat: 25.2267, lng: 55.2889 }
+            ];
+
+            const propertyTypesForTable = [
+                { name: 'Studio', baseBuy: 600000, baseRent: 45000 },
+                { name: '1-Bedroom Apt', baseBuy: 1000000, baseRent: 75000 },
+                { name: '2-Bedroom Apt', baseBuy: 1800000, baseRent: 120000 },
+                { name: '3-Bedroom Apt', baseBuy: 3000000, baseRent: 180000 },
+                { name: 'Townhouse', baseBuy: 2500000, baseRent: 160000 },
+                { name: 'Villa', baseBuy: 4500000, baseRent: 250000 },
+                { name: 'Office (per sq. ft.)', baseBuy: 1200, baseRent: 100 },
+                { name: 'Retail (per sq. ft.)', baseBuy: 2000, baseRent: 180 }
+            ];
+
+            // --- 2. GET DOM ELEMENTS ---
+            const searchBar = document.getElementById('searchBar');
+            const locationSelect = document.getElementById('locationSelect');
+            const getRatesButton = document.getElementById('getRatesButton');
+            const resultsMessage = document.getElementById('resultsMessage');
+            const tableContainer = document.getElementById('resultsTableContainer');
+            const tableBody = document.getElementById('resultsTableBody');
+
+            // --- 3. INITIALIZE MAP ---
+            const map = L.map('map').setView([25.15, 55.25], 10.5);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            let currentMarker = null;
+
+            // --- 4. FUNCTIONS ---
+            function populateLocations(filter = '') {
+                locationSelect.innerHTML = '';
+                const filtered = locations.filter(loc => loc.name.toLowerCase().includes(filter.toLowerCase()));
+                filtered.forEach(loc => {
+                    const option = document.createElement('option');
+                    option.value = loc.id;
+                    option.textContent = loc.name;
+                    option.dataset.lat = loc.lat;
+                    option.dataset.lng = loc.lng;
+                    locationSelect.appendChild(option);
+                });
+            }
+
+            function updateMap(lat, lng, name) {
+                if (!lat || !lng) return;
+                map.flyTo([lat, lng], 14);
+                if (currentMarker) map.removeLayer(currentMarker);
+                currentMarker = L.marker([lat, lng]).addTo(map).bindPopup(`<b>${name}</b>`).openPopup();
+            }
+
+            function findNearestLocation(lat, lng) {
+                let closest = null;
+                let minDistance = Infinity;
+                locations.forEach(loc => {
+                    const dist = Math.pow(lat - loc.lat, 2) + Math.pow(lng - loc.lng, 2);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closest = loc;
+                    }
+                });
+                return closest;
+            }
+
+            function generateRateTable() {
+                const selectedLocationId = locationSelect.value;
+                if (!selectedLocationId) {
+                    resultsMessage.innerHTML = '<p style="color: red;">Please select a location first!</p>';
+                    tableContainer.style.display = 'none';
+                    return;
+                }
+                const selectedLocation = locations.find(loc => loc.id === selectedLocationId);
+                
+                resultsMessage.innerHTML = `<p>Generating rates for <strong>${selectedLocation.name}</strong>...</p>`;
+                tableContainer.style.display = 'none';
+                tableBody.innerHTML = '';
+
+                setTimeout(() => {
+                    propertyTypesForTable.forEach(prop => {
+                        const randomness = 1 + (Math.random() - 0.5) * 0.3; 
+                        const buyingRate = (prop.baseBuy * randomness).toFixed(0);
+                        const rentRate = (prop.baseRent * randomness).toFixed(0);
+                        const formattedBuy = new Intl.NumberFormat('en-US').format(buyingRate);
+                        const formattedRent = new Intl.NumberFormat('en-US').format(rentRate);
+                        const row = `<tr><td>${prop.name}</td><td>${formattedBuy}</td><td>${formattedRent}</td></tr>`;
+                        tableBody.innerHTML += row;
+                    });
+                    
+                    resultsMessage.innerHTML = `<p>Showing estimated rates for <strong>${selectedLocation.name}</strong></p>`;
+                    tableContainer.style.display = 'block';
+                }, 1500);
+            }
+
+            // --- 5. EVENT LISTENERS ---
+            populateLocations();
+            searchBar.addEventListener('input', (e) => populateLocations(e.target.value));
+
+            locationSelect.addEventListener('change', (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                updateMap(selectedOption.dataset.lat, selectedOption.dataset.lng, selectedOption.textContent);
+            });
+
+            map.on('click', function(e) {
+                const nearest = findNearestLocation(e.latlng.lat, e.latlng.lng);
+                if (nearest) {
+                    locationSelect.value = nearest.id;
+                    locationSelect.dispatchEvent(new Event('change'));
+                }
+            });
+
+            getRatesButton.addEventListener('click', generateRateTable);
+        });
+    </script>
+</body>
+</html>
