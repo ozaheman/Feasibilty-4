@@ -332,7 +332,7 @@ snapIndicators.remove(...snapIndicators.getObjects());
 if (snapPoint) {
 const indicator = new fabric.Circle({
 left: snapPoint.x, top: snapPoint.y,
-radius: 100 / state.canvas.getZoom(), fill: 'transparent',
+radius: 5 / state.canvas.getZoom(), fill: 'transparent',
 stroke: 'cyan', strokeWidth: 2 / state.canvas.getZoom(),
 originX: 'center', originY: 'center',
 isSnapPoint: true

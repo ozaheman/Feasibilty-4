@@ -53,8 +53,10 @@ export function updateUI() {
     const hasHotelFootprint = state.levels['Hotel']?.objects.length > 0;
     const hasWarehouseFootprint = state.levels['Warehouse']?.objects.length > 0;
     const hasLabourCampFootprint = state.levels['LabourCamp']?.objects.length > 0;
-    const hasCalculableFootprint = hasTypicalFootprint || hasHotelFootprint || hasWarehouseFootprint || hasLabourCampFootprint;
+    //const hasCalculableFootprint = hasTypicalFootprint || hasHotelFootprint || hasWarehouseFootprint || hasLabourCampFootprint;
     const hasAnyFootprint = Object.values(state.levels).some(l => l.objects.length > 0);
+     const hasSchoolFootprint = state.levels['School']?.objects.length > 0;
+    const hasCalculableFootprint = hasTypicalFootprint || hasHotelFootprint || hasWarehouseFootprint || hasLabourCampFootprint || hasSchoolFootprint;
     const hasSelection = !!state.canvas.getActiveObject();
     const isEditingFootprint = state.currentMode === 'editingFootprint';
     const isFootprintSelected = hasSelection && canvas.getActiveObject()?.isFootprint;

@@ -177,14 +177,17 @@ export function generateSummaryReportHTML(data) {
             <tr><td>Garbage (kg)</td><td>${fInt(schoolCalcs.garbageRequiredKg)}</td><td>-</td></tr>
             <tr class="total-row"><td>Dumpsters</td><td>${fInt(schoolCalcs.garbageContainers)}</td><td>-</td></tr>
             
-        </table>
+        
+        </table>`;
+    }
+    
+     /* </table>
         <table class="report-table"><tr class="section-header"><td colspan="2">School Garbage Calculation</td></tr>
             <tr><td>Basis</td><td>12 Kgs / 100 SQM of GFA</td></tr>
             <tr><td>Total GFA (Classroom + Admin)</td><td>${f(schoolCalcs.totalClassroomArea + schoolCalcs.adminArea)} m²</td></tr>
             <tr class="total-row"><td>Total Garbage</td><td>${f(schoolCalcs.garbageRequired.totalKg, 0)} Kgs</td></tr>
-            <tr class="grand-total-row"><td>Dumpsters Required</td><td>${fInt(schoolCalcs.garbageRequired.containers)} x 2.5 CuM</td></tr>
-        </table>`;
-    }
+            <tr class="grand-total-row"><td>Dumpsters Required</td><td>${fInt(schoolCalcs.garbageRequired.containers)} x 2.5 CuM</td></tr>  */
+    
 let labourCampReportHTML = '';
     if (labourCampCalcs) {
         labourCampReportHTML = `
@@ -355,8 +358,18 @@ export function generateDetailedReportHTML(data, costParams, includeCost, includ
             }
 
             // Office & Retail (Common)
-            if (areas.achievedOfficeGfa > 0 && marketRates.office) { /* ... same logic as before ... */ }
-            if (areas.achievedRetailGfa > 0 && marketRates.retail) { /* ... same logic as before ... */ }
+            if (areas.achievedOfficeGfa > 0 && marketRates.office) {const officeGfaSqft = areas.achievedOfficeGfa * SQFT_CONVERSION;
+                const revenue = officeGfaSqft * marketRates.office.buy;
+                totalRevenue += revenue;
+                revenueRows += `<tr><td>Office Space</td><td>${fInt(officeGfaSqft)} sqft</td><td>${fInt(marketRates.office.buy)} /sqft</td><td>${fInt(revenue)}</td></tr>`;
+            }
+            if (areas.achievedRetailGfa > 0 && marketRates.retail) {
+                const retailGfaSqft = areas.achievedRetailGfa * SQFT_CONVERSION;
+                const revenue = retailGfaSqft * marketRates.retail.buy;
+                totalRevenue += revenue;
+                revenueRows += `<tr><td>Retail Space</td><td>${fInt(retailGfaSqft)} sqft</td><td>${fInt(marketRates.retail.buy)} /sqft</td><td>${fInt(revenue)}</td></tr>`;
+            }
+
 
             // Warehouse & Labour Camp
             if (state.projectType === 'Warehouse' && areas.achievedWarehouseGfa > 0 && marketRates.warehouse) {
@@ -387,7 +400,8 @@ export function generateDetailedReportHTML(data, costParams, includeCost, includ
             </table>`;
 
            } else {
-            revenueTableHTML = `<div class="report-table" style="margin-top:20px; text-align:center; padding:15px; background-color:#fff3cd;">
+            //revenueTableHTML = `<div class="report-table" style="margin-top:20px; text-align:center; padding:15px; background-color:#fff3cd;">
+            buyingRevenueHTML = `<div class="report-table" style="margin-top:20px; text-align:center; padding:15px; background-color:#fff3cd;">
                 <strong>Revenue Analysis not available.</strong><br>Please run the "Market Rate Analysis" from the sidebar first.
             </div>`;
         }
@@ -412,9 +426,20 @@ let rentingRevenueHTML = '';
                     }
                 });
             }
+             if (areas.achievedOfficeGfa > 0 && marketRates.office) {
+                const officeGfaSqft = areas.achievedOfficeGfa * SQFT_CONVERSION;
+                const rent = officeGfaSqft * marketRates.office.rent;
+                totalAnnualRent += rent;
+                rentRows += `<tr><td>Office Space</td><td>${fInt(officeGfaSqft)} sqft</td><td>${fInt(marketRates.office.rent)} /sqft/yr</td><td>${fInt(rent)}</td></tr>`;
+             }
             // Office & Retail
             if (areas.achievedOfficeGfa > 0 && marketRates.office) { /* ... same logic ... */ }
-            if (areas.achievedRetailGfa > 0 && marketRates.retail) { /* ... same logic ... */ }
+            if (areas.achievedRetailGfa > 0 && marketRates.retail) {
+                const retailGfaSqft = areas.achievedRetailGfa * SQFT_CONVERSION;
+                const rent = retailGfaSqft * marketRates.retail.rent;
+                totalAnnualRent += rent;
+                rentRows += `<tr><td>Retail Space</td><td>${fInt(retailGfaSqft)} sqft</td><td>${fInt(marketRates.retail.rent)} /sqft/yr</td><td>${fInt(rent)}</td></tr>`;
+            }
             
             // Warehouse & Labour Camp
             if (state.projectType === 'Warehouse' && areas.achievedWarehouseGfa > 0 && marketRates.warehouse) {

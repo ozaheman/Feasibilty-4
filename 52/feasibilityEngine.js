@@ -44,6 +44,9 @@ document.querySelectorAll('.param-input').forEach(input => {
 const achievedRetailGfa = getAreaForLevel('Retail') + getAreaForLevel('Supermarket');
 const achievedOfficeGfa = getAreaForLevel('Office') + getAreaForLevel('Commercial');
 const achievedHotelGfa = getAreaForLevel('Hotel') * inputs.numHotelFloors;
+const achievedSchoolGfa = getAreaForLevel('School');
+    const achievedWarehouseGfa = getAreaForLevel('Warehouse');
+    const achievedLabourCampGfa = getAreaForLevel('LabourCamp');
 
 const getBlockDetails = (category, level = null) => {
     let totalArea = 0;
@@ -59,7 +62,7 @@ const getBlockDetails = (category, level = null) => {
     return { totalArea, details };
 };
 
-const calculateNetParkingArea = (levelName) => {
+/* const calculateNetParkingArea = (levelName) => {
     // Only calculate parking for these specific levels
     const validParkingLevels = ['Basement', 'Ground_Floor', 'Podium'];
     if (!validParkingLevels.includes(levelName)) {return 0;}
@@ -68,11 +71,29 @@ const calculateNetParkingArea = (levelName) => {
      const achievedSchoolGfa = getAreaForLevel('School');
     const achievedWarehouseGfa = getAreaForLevel('Warehouse');
     const achievedLabourCampGfa = getAreaForLevel('LabourCamp');
-    if (footprintArea === 0) return 0;
-    const gfaArea = getBlockDetails('gfa', levelName).totalArea;
-    const servicesArea = getBlockDetails('service', levelName).totalArea;
-    return Math.max(0, footprintArea - gfaArea - servicesArea);
-};
+    const getBlockDetails = (category, level = null) => {
+        let totalArea = 0;
+        const details = [];
+        state.serviceBlocks
+            .filter(b => b.blockData && b.blockData.category === category && (!level || b.level === level))
+            .forEach(b => {
+                const area = (b.getScaledWidth() * b.getScaledHeight()) * (state.scale.ratio * state.scale.ratio);
+                totalArea += area;
+                details.push({
+                    name: b.blockData.name,area: area,level: b.level});
+            });
+        return { totalArea, details };
+    }; */
+
+ const calculateNetParkingArea = (levelName) => {
+        const validParkingLevels = ['Basement', 'Ground_Floor', 'Podium'];
+        if (!validParkingLevels.includes(levelName)) {return 0;}
+        const footprintArea = getAreaForLevel(levelName);
+        if (footprintArea === 0) return 0;
+        const gfaArea = getBlockDetails('gfa', levelName).totalArea;
+        const servicesArea = getBlockDetails('service', levelName).totalArea;
+        return Math.max(0, footprintArea - gfaArea - servicesArea);
+    };
 
 let aptCalcs = { totalUnits: 0, totalSellableArea: 0, totalBalconyArea: 0, totalOccupancy: 0, aptMixWithCounts: [], wingBreakdown: [] };
 let hotelCalcs = null;
@@ -83,25 +104,25 @@ let corridorTotalArea = 0;
 let wingCalcs = [];
 
 // NEW School Calculation Logic
-    if (state.projectType === 'School' && schoolFootprints.length > 0) {
-        const totalClassroomArea = getAreaOfBlocksByCategory('gfa', 'School', 1, 'classroom');
+    if (state.projectType === 'School' && (schoolFootprints.length > 0 || Object.values(inputs).some(v => v > 0))){
+        const totalClassroomArea = getAreaOfBlocksByCategory('gfa', 'School', 1, 'classroom') + getAreaForLevel('School');
         const numClassrooms = inputs['num-classrooms'];
         const adminArea = inputs['admin-area'];
         
-        const playAreaRequired = totalClassroomArea * 2;
+        const playAreaRequired = (totalClassroomArea + adminArea) * 2;
         const coveredPlayAreaRequired = playAreaRequired / 2;
 
         const playAreaProvided = getAreaOfBlocksByCategory('builtup', 'Ground_Floor', 1, 'play area') 
                                 + getAreaOfBlocksByCategory('builtup', 'Podium', 1, 'play area') 
                                 + getAreaOfBlocksByCategory('builtup', 'Roof', 1, 'play area');
-        const coveredPlayAreaProvided = 0; // This needs a specific block or manual input
+        const coveredPlayAreaProvided = getAreaOfBlocksByCategory('builtup', 'Ground_Floor', 1, 'covered play area');
 
         const parkingCarReq = numClassrooms + Math.ceil(adminArea / 45);
         const parkingBusReq = Math.ceil(numClassrooms / 3);
         const parkingAccessibleReq = Math.ceil(parkingCarReq / 50);
 
         const garbageRequiredKg = (totalClassroomArea + adminArea) / 100 * 12;
-        const garbageContainers = Math.ceil(garbageRequiredKg / 500); // Assuming 500kg per 2.5cum container
+        const garbageContainers = Math.ceil(garbageRequiredKg / 500);
 
         const toiletsStudents = Math.ceil(numClassrooms);
         const toiletsStaff = Math.max(2, Math.ceil(numClassrooms / 10));
@@ -119,7 +140,8 @@ let wingCalcs = [];
     // NEW Labour Camp Calculation Logic
     if (state.projectType === 'LabourCamp' && labourCampFootprints.length > 0) {
         const laboursPerRoom = inputs['labours-per-room'];
-        const numRooms = Math.floor(achievedLabourCampGfa / (state.currentProgram.unitTypes.find(u => u.key === 'labor_room')?.area || 20));
+        const roomArea = state.currentProgram?.unitTypes.find(u => u.key === 'labor_room')?.area || 20; // 20sqm default
+        const numRooms = Math.floor(achievedLabourCampGfa / roomArea);
         const totalOccupancy = numRooms * laboursPerRoom;
 
         const wcRequired = Math.ceil(totalOccupancy / 10);

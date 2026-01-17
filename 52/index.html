@@ -232,44 +232,44 @@
         <label for="serviceBlockType">Select Block(s) (Ctrl+Click)</label>
         <select id="serviceBlockType" multiple></select>
         <button id="add-block-btn" disabled>Add Block(s) to Plan</button>
-        <div id="selected-object-controls">
-            <h4>Selected Object: <span id="selected-object-name"></span></h4>
-               <div id="category-controls-wrapper" style="display:none; margin-bottom:10px;">
-                <label for="block-category-select">Area Type</label>
-                <select id="block-category-select" style="margin-bottom:0;"></select>
-            </div>
-            
-            <div class="button-grid">
-                <button id="toggle-lock-btn" class="lock-btn locked">🔒 Locked</button>
-                <button id="edit-group-btn" class="warning">Edit Group</button>
-            </div>
-             <button id="confirm-group-edit-btn" style="display:none; margin-top:5px;" class="active">✓ Finish Editing</button>
-            <div id="dimension-controls-wrapper" class="input-grid" style="margin-bottom:10px; margin-top:10px;">
-                <div><label for="block-width">Width (m)</label><input type="number" id="block-width" step="0.1"></div>
-                <div><label for="block-height">Height (m)</label><input type="number" id="block-height" step="0.1"></div>
-            </div>
-            <div id="substation-controls-wrapper" style="display:none; margin-bottom:10px; margin-top:10px;">
-                <div class="input-grid">
-                    <div><label for="substation-tcl">TCL (kW)</label><input type="number" id="substation-tcl" step="100" value="1500"></div>
-                    <div><label for="substation-num-tx"># Transformers</label><input type="number" id="substation-num-tx" step="1" min="1" value="1"></div>
-                </div>
-            </div>
-            <div id="rotation-control-wrapper">
-                <label for="block-rotation">Rotation (°):</label>
-                <input type="number" id="block-rotation" step="1">
-            </div>
-             <div class="button-grid-4" style="margin-top: 5px;">
-                <button id="flip-h-btn" title="Flip Horizontal">H-Flip</button>
-                <button id="flip-v-btn" title="Flip Vertical">V-Flip</button>
-                <button id="rotate-90-btn" title="Rotate 90° Clockwise">90°</button>
-                <button id="align-block-btn" class="warning">Align</button>
-             </div>
-             <div class="button-grid" style="margin-top: 5px;">
-                 <button id="move-level-btn" class="warning">Move to Level</button>
-                 <button id="copy-to-levels-btn" class="warning">Copy to Levels...</button>
-             </div>
-             <button id="delete-block-btn" class="danger" style="margin-top:5px;">Delete Object</button>
+       <div id="selected-object-controls">
+    <h4>Selected Object: <span id="selected-object-name"></span></h4>
+       <div id="category-controls-wrapper" style="display:none; margin-bottom:10px;">
+        <label for="block-category-select">Area Type</label>
+        <select id="block-category-select" style="margin-bottom:0;"></select>
+    </div>
+    
+    <div class="button-grid">
+        <button id="toggle-lock-btn" class="lock-btn locked">🔒 Locked</button>
+        <button id="edit-group-btn" class="warning">Edit Group</button>
+    </div>
+     <button id="confirm-group-edit-btn" style="display:none; margin-top:5px;" class="active">✓ Finish Editing</button>
+    <div id="dimension-controls-wrapper" class="input-grid" style="margin-bottom:10px; margin-top:10px;">
+        <div><label for="block-width">Width (m)</label><input type="number" id="block-width" step="0.1"></div>
+        <div><label for="block-height">Height (m)</label><input type="number" id="block-height" step="0.1"></div>
+    </div>
+    <div id="substation-controls-wrapper" style="display:none; margin-bottom:10px; margin-top:10px;">
+        <div class="input-grid">
+            <div><label for="substation-tcl">TCL (kW)</label><input type="number" id="substation-tcl" step="100" value="1500"></div>
+            <div><label for="substation-num-tx"># Transformers</label><input type="number" id="substation-num-tx" step="1" min="1" value="1"></div>
         </div>
+    </div>
+    <div id="rotation-control-wrapper">
+        <label for="block-rotation">Rotation (°):</label>
+        <input type="number" id="block-rotation" step="1">
+    </div>
+     <div class="button-grid-4" style="margin-top: 5px;">
+        <button id="flip-h-btn" title="Flip Horizontal">H-Flip</button>
+        <button id="flip-v-btn" title="Flip Vertical">V-Flip</button>
+        <button id="rotate-90-btn" title="Rotate 90° Clockwise">90°</button>
+        <button id="align-block-btn" class="warning">Align</button>
+     </div>
+     <div class="button-grid" style="margin-top: 5px;">
+         <button id="move-level-btn" class="warning">Move to Level</button>
+         <button id="copy-to-levels-btn" class="warning">Copy to Levels...</button>
+     </div>
+     <button id="delete-block-btn" class="danger" style="margin-top:5px;">Delete Object</button>
+</div>
         <h4 style="margin-top:15px;">Placed Service Blocks</h4>
         <div id="service-block-list" style="font-size:0.8em; max-height: 150px; overflow-y:auto; border: 1px solid #eee; padding: 5px; margin-top: 5px;">
         </div>
