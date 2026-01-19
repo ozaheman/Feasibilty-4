@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DBC Part G - Substation Selector (Dynamic)</title>
+    <style>
+        /* CSS from previous example - unchanged */
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1, h2, h3 {
+            color: #333;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
+        section {
+            background-color: #fff;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background-color: #e9e9e9;
+            font-weight: bold;
+        }
+        .input-section tr:nth-child(even),
+        .output-section tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 95%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* Include padding in width */
+        }
+        .input-section td:first-child {
+            width: 30%;
+            font-weight: bold;
+        }
+        .output-section td:first-child {
+            width: 30%;
+            font-weight: bold;
+            background-color: #f0f8ff;
+        }
+        .output-value {
+            font-style: italic;
+            color: #333;
+            background-color: #fafff0;
+            font-weight: 500;
+        }
+         details {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-top: 15px;
+            background-color: #f9f9f9;
+        }
+        summary {
+            font-weight: bold;
+            padding: 10px;
+            background-color: #e9e9e9;
+            cursor: pointer;
+            border-bottom: 1px solid #ccc;
+        }
+        details[open] summary {
+            border-bottom: 1px solid #ccc;
+        }
+        details > *:not(summary) {
+             padding: 10px;
+             overflow-x: auto;
+        }
+        code {
+            background-color: #eee;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .highlight {
+             color: #d9534f;
+             font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Dubai Building Code (Part G) - Substation Selection Aid (Dynamic)</h1>
+    <p>Enter project details below. The "Results / Lookup" section will update automatically.</p>
+
+    <!-- Section 1: Project Input Form (Unchanged) -->
+    <section id="project-input">
+        <h2>1. Project Input & Selector</h2>
+        <form id="substation-form">
+            <table class="input-section">
+                <!-- Input Rows -->
+                 <tr>
+                    <td><label for="projectName">Project Name:</label></td>
+                    <td><input type="text" id="projectName" name="projectName"></td>
+                </tr>
+                <tr>
+                    <td><label for="buildingType">Building Type:</label></td>
+                    <td>
+                        <select id="buildingType" name="buildingType">
+                            <option value="">-- Select Type --</option>
+                            <option value="Residential Villa">Residential Villa</option>
+                            <option value="Residential Building">Residential Building</option>
+                            <option value="Commercial">Commercial</option>
+                            <option value="Industrial">Industrial</option>
+                            <option value="Labour Accommodation">Labour Accommodation</option>
+                            <option value="School">School</option>
+                            <option value="Hospital">Hospital</option>
+                            <option value="Hotel">Hotel</option>
+                            <option value="Shopping Mall">Shopping Mall</option>
+                            <option value="Petrol Station">Petrol Station</option>
+                            <option value="Warehouse">Warehouse</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td><label for="estimatedTCL">Estimated TCL (kW):</label></td>
+                    <td><input type="number" id="estimatedTCL" name="estimatedTCL" placeholder="e.g., 1200"></td>
+                </tr>
+                 <tr>
+                    <td><label for="substationLocation">Substation Location:</label></td>
+                    <td>
+                        <select id="substationLocation" name="substationLocation">
+                            <option value="">-- Select Location --</option>
+                            <option value="Ground Floor">Ground Floor</option>
+                            <option value="Basement">Basement</option>
+                            <option value="Open-to-Sky">Open-to-Sky</option>
+                        </select>
+                    </td>
+                </tr>
+                 <tr>
+                    <td><label for="numTransformers">Number of Transformers (Tx):</label></td>
+                    <td><input type="number" id="numTransformers" name="numTransformers" min="1" value="1" placeholder="e.g., 1 or 2"></td>
+                </tr>
+                <tr>
+                    <td><label for="rmuLocation">RMU Location:</label></td>
+                    <td>
+                        <select id="rmuLocation" name="rmuLocation">
+                            <option value="">-- Select RMU Setup --</option>
+                            <option value="Same Room">Same Room as Transformer</option>
+                            <option value="Separate Room (GF)">Separate Room (Ground Floor)</option>
+                            <option value="N/A">Not Applicable (e.g., OTS)</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <td><label for="wetAreasAbove">Wet Areas Above?</label></td>
+                    <td>
+                        <select id="wetAreasAbove" name="wetAreasAbove">
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </td>
+                </tr>
+                 <tr>
+                    <td><label for="superHighRise">Super High-Rise (>200m)?</label></td>
+                    <td>
+                         <select id="superHighRise" name="superHighRise">
+                            <option value="No">No</option>
+                            <option value="Yes">Yes</option>
+                        </select>
+                    </td>
+                </tr>
+            </table>
+        </form>
+    </section>
+
+    <!-- Section 2: Results/Lookup -->
+    <section id="results">
+        <h2>2. Results / Lookup</h2>
+        <table class="output-section">
+            <!-- ** UPDATED OUTPUT ROWS ** -->
+             <tr>
+                <td>Suggested Substation Type:</td>
+                <td class="output-value"><span id="output-type">-</span></td>
+            </tr>
+             <tr>
+                <td>Approx. Dimensions (L x W m):</td>
+                <td class="output-value"><span id="output-dimensions">-</span></td>
+            </tr>
+            <tr>
+                <td>Min. Width Required (m):</td>
+                <td class="output-value"><span id="output-width">-</span></td>
+            </tr>
+             <tr>
+                <td>Clear Height (mm):</td>
+                <td class="output-value"><span id="output-height">-</span></td>
+            </tr>
+            <tr>
+                <td>FFL vs Ground (mm):</td>
+                <td class="output-value"><span id="output-ffl">-</span></td>
+            </tr>
+            <tr>
+                <td>Ventilation Type:</td>
+                <td class="output-value"><span id="output-ventilation">-</span></td>
+            </tr>
+             <tr>
+                <td>Fire Rating (Walls):</td>
+                <td class="output-value"><span id="output-firerating-walls">-</span></td>
+            </tr>
+             <tr>
+                <td>Fire Rating (Doors):</td>
+                <td class="output-value"><span id="output-firerating-doors">-</span></td>
+            </tr>
+             <tr>
+                <td>Attic Slab Required?:</td>
+                <td class="output-value"><span id="output-attic">-</span></td>
+            </tr>
+            <tr>
+                <td>Key DBC Reference(s):</td>
+                <td class="output-value"><code><span id="output-dbc-refs">-</span></code></td>
+            </tr>
+             <tr>
+                <td>Layout Figure Ref:</td>
+                <td class="output-value"><code><span id="output-layout-fig">-</span></code></td>
+            </tr>
+             <tr>
+                <td>Notes/Special Conditions:</td>
+                <td class="output-value"><span id="output-notes">-</span></td>
+            </tr>
+        </table>
+    </section>
+
+    <!-- Section 3: Substation Data Reference (Expandable) -->
+    <section id="data-reference">
+         <details>
+            <summary>3. Substation Data Reference (Click to Expand - Sample Data)</summary>
+            <!-- Data table from previous HTML example goes here -->
+             <table>
+                <thead>
+                    <tr>
+                        <th>Substation Type Key</th>
+                        <th>Parameter Category</th>
+                        <th>Parameter Name</th>
+                        <th>Value / Requirement</th>
+                        <th>DBC Reference</th>
+                        <th>Layout Fig Ref</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Sample Rows (Expand significantly in real use) -->
+                    <tr>
+                        <td>Single Room GF</td><td>Area</td><td>Base Area 1Tx (m²)</td><td>33</td><td>Table G.23</td><td>Fig G.39</td><td>Base for 1x 1000/1500 kVA</td>
+                    </tr>
+                     <tr>
+                        <td>Single Room GF</td><td>Area</td><td>Total Area 2Tx (m²)</td><td>55</td><td>Table G.23</td><td>Fig G.40</td><td>Total for 2x 1000/1500 kVA</td>
+                    </tr>
+                     <tr>
+                        <td>Single Room GF</td><td>Area</td><td>Add. Area per Add. Tx > 2</td><td>25</td><td>Table G.23 Ref</td><td>Fig G.41 Ref</td><td>Est. from T G.23 add Tx area</td>
+                    </tr>
+                    <tr>
+                        <td>Single Room GF</td><td>Dimensions</td><td>Min Width 1Tx (m)</td><td>4.57</td><td>Table G.23</td><td>Fig G.39</td><td>Towards door side</td>
+                    </tr>
+                    <tr>
+                        <td>Single Room GF</td><td>Dimensions</td><td>Min Width 2Tx (m)</td><td>6.1</td><td>Table G.23</td><td>Fig G.40</td><td>Towards door side</td>
+                    </tr>
+                     <tr>
+                        <td>Single Room GF</td><td>Dimensions</td><td>Clear Height (mm)</td><td>3700</td><td>G.7.2.3</td><td>Fig G.36</td><td></td>
+                    </tr>
+                    <tr>
+                        <td>Single Room GF</td><td>Dimensions</td><td>FFL vs Ground (mm)</td><td>150 to 300 (higher)</td><td>G.7.2.3</td><td>Fig G.36</td><td>Towards door side</td>
+                    </tr>
+                     <tr>
+                        <td>Single Room GF</td><td>Fire Safety</td><td>Wall Fire Rating</td><td>2 hr</td><td>G.7.6.1 / T1.9</td><td></td><td>Confirm exceptions w/ DCD</td>
+                    </tr>
+                     <tr>
+                        <td>Single Room GF</td><td>Fire Safety</td><td>Door Fire Rating</td><td>90 min (if internal opening)</td><td>G.7.6.3</td><td>Fig G.50/G.51</td><td>Louvered allowed if external</td>
+                    </tr>
+                    <tr>
+                        <td>Single Room GF</td><td>Ventilation</td><td>Ventilation Type</td><td>Natural (2 sides louvered)</td><td>G.7.6.2</td><td>Fig G.50/G.51</td><td>See louver size reqs</td>
+                    </tr>
+                    <tr><td colspan="7" style="background-color:#eee;">... (Other params for Single Room GF) ...</td></tr>
+                    <tr>
+                        <td>Split Room GF - RMU</td><td>Area</td><td>Base Area (m²)</td><td>9</td><td>Table G.24</td><td>Fig G.42/G.43</td><td>Base for 1 RMU ctrl 2 Tx</td>
+                    </tr>
+                     <tr>
+                        <td>Split Room GF - RMU</td><td>Area</td><td>Add. Area per Add. RMU</td><td>7</td><td>Table G.24</td><td>Fig G.43</td><td></td>
+                    </tr>
+                    <tr>
+                        <td>Split Room GF - RMU</td><td>Dimensions</td><td>Min Width (m)</td><td>3</td><td>Table G.24</td><td>Fig G.42/G.43</td><td>Towards door side</td>
+                    </tr>
+                     <tr>
+                        <td>Split Room GF - RMU</td><td>Dimensions</td><td>Clear Height (mm)</td><td>3000</td><td>G.7.2.3</td><td></td><td></td>
+                    </tr>
+                     <!-- Inherit other Split Room RMU params -->
+                    <tr>
+                        <td>Split Room GF - Transformer</td><td>Area</td><td>Base Area 1Tx (m²)</td><td>21</td><td>Table G.25</td><td>Fig G.44</td><td>Base for 1 Tx</td>
+                    </tr>
+                     <tr>
+                        <td>Split Room GF - Transformer</td><td>Area</td><td>Add. Area per Add. Tx</td><td>21</td><td>Table G.25</td><td>Fig G.44 Ref</td><td></td>
+                    </tr>
+                    <tr>
+                        <td>Split Room GF - Transformer</td><td>Dimensions</td><td>Min Width 1Tx (m)</td><td>4.57</td><td>Table G.25</td><td>Fig G.44</td><td></td>
+                    </tr>
+                    <tr>
+                        <td>Split Room GF - Transformer</td><td>Dimensions</td><td>Min Width 2Tx (m)</td><td>6.1</td><td>Table G.25</td><td>Fig G.44 Ref</td><td>Ref from T G.25 for 2 Tx Total Area</td>
+                    </tr>
+                     <tr>
+                        <td>Split Room GF - Transformer</td><td>Dimensions</td><td>Clear Height (mm)</td><td>3700</td><td>G.7.2.3</td><td></td><td>Assumed GF height</td>
+                    </tr>
+                    <!-- Inherit other Split Room Tx params -->
+                     <tr>
+                        <td>Basement - RMU (GF)</td><td>Area</td><td>Base Area (m²)</td><td>9</td><td>Table G.26</td><td>Fig G.43</td><td>RMU Room located on GF</td>
+                    </tr>
+                    <tr>
+                        <td>Basement - RMU (GF)</td><td>Area</td><td>Add. Area per Add. RMU</td><td>7</td><td>Table G.26 Ref</td><td>Fig G.43</td><td>Assumed same as GF</td>
+                    </tr>
+                     <tr>
+                        <td>Basement - RMU (GF)</td><td>Dimensions</td><td>Min Width (m)</td><td>3</td><td>Table G.26</td><td>Fig G.43</td><td>Towards door side</td>
+                    </tr>
+                     <tr>
+                        <td>Basement - RMU (GF)</td><td>Dimensions</td><td>Clear Height (mm)</td><td>3000</td><td>G.7.2.3</td><td></td><td></td>
+                    </tr>
+                    <!-- Inherit other Basement RMU params -->
+                     <tr>
+                        <td>Basement - Transformer (B1)</td><td>Area</td><td>Base Area 1Tx (m²)</td><td>21</td><td>Table G.27</td><td>Fig G.44</td><td>Tx Room in First Basement</td>
+                    </tr>
+                     <tr>
+                        <td>Basement - Transformer (B1)</td><td>Area</td><td>Add. Area per Add. Tx</td><td>21</td><td>Table G.27</td><td>Fig G.44 Ref</td><td></td>
+                    </tr>
+                     <tr>
+                        <td>Basement - Transformer (B1)</td><td>Dimensions</td><td>Min Width 1Tx (m)</td><td>4.57</td><td>Table G.27</td><td>Fig G.44</td><td></td>
+                    </tr>
+                    <tr>
+                        <td>Basement - Transformer (B1)</td><td>Dimensions</td><td>Min Width 2Tx (m)</td><td>6.1</td><td>Table G.27</td><td>Fig G.44 Ref</td><td>Ref from T G.27 for 2 Tx Total Area</td>
+                    </tr>
+                    <tr>
+                        <td>Basement - Transformer (B1)</td><td>Dimensions</td><td>Clear Height (mm)</td><td>3000</td><td>G.7.2.3</td><td></td><td></td>
+                    </tr>
+                     <tr>
+                        <td>Basement - Transformer (B1)</td><td>Dimensions</td><td>FFL vs Adj. Level (mm)</td><td>75 to 150 (higher)</td><td>G.7.2.3</td><td></td><td>FFL vs adjacent *outside* ground</td>
+                    </tr>
+                     <tr>
+                        <td>Basement - Transformer (B1)</td><td>Ventilation</td><td>Ventilation Type</td><td>Forced + Louver Backup</td><td>G.7.6.3</td><td>Fig G.52/G.53</td><td>Requires fire shutters/curtains</td>
+                    </tr>
+                    <!-- Inherit other Basement Tx params -->
+                    <tr>
+                        <td>OTS Dedicated Panel</td><td>Dimensions</td><td>Footprint (m x m)</td><td>6.1 x 6.1</td><td>Table G.28</td><td>Fig G.45</td><td>1 Tx + 1 RMU config</td>
+                    </tr>
+                     <tr>
+                        <td>OTS Pocket (1 Tx)</td><td>Dimensions</td><td>Footprint (m x m)</td><td>4.57 x 3.66</td><td>Table G.29</td><td>Fig G.46</td><td></td>
+                    </tr>
+                    <tr>
+                        <td>OTS Pocket (2 Tx)</td><td>Dimensions</td><td>Footprint (m x m)</td><td>6.1 x 6.1</td><td>Table G.29</td><td>Fig G.47</td><td></td>
+                    </tr>
+                     <tr>
+                        <td>DEWA Control Room (11kV - Enc)</td><td>Area</td><td>Base Area (m²)</td><td>29.16</td><td>Table G.30</td><td>Fig G.48</td><td>2 Feeders standard</td>
+                    </tr>
+                    <tr>
+                        <td>DEWA Control Room (11kV - Enc)</td><td>Area</td><td>Add. Area per Add. Feeder</td><td>8</td><td>Table G.30</td><td></td><td></td>
+                    </tr>
+                    <tr>
+                        <td>DEWA Control Room (11kV - Enc)</td><td>Dimensions</td><td>Room Size (m x m)</td><td>5.4 x 5.4</td><td>Table G.30</td><td>Fig G.48</td><td>Blockwork/RCC</td>
+                    </tr>
+                      <tr>
+                        <td>DEWA Control Room (11kV - OTS)</td><td>Area</td><td>Base Area (m²)</td><td>37.2</td><td>Table G.30</td><td>Fig G.49</td><td>2 Feeders standard, FGRP Kiosk</td>
+                    </tr>
+                    <tr>
+                        <td>DEWA Control Room (11kV - OTS)</td><td>Area</td><td>Add. Area per Add. Feeder</td><td>37.2</td><td>Table G.30</td><td></td><td></td>
+                    </tr>
+                    <tr>
+                        <td>DEWA Control Room (11kV - OTS)</td><td>Dimensions</td><td>Footprint (m x m)</td><td>6.1 x 6.1</td><td>Table G.30</td><td>Fig G.49</td><td>Kiosk footprint</td>
+                    </tr>
+                     <tr>
+                        <td>**COMMON**</td><td>Attic Slab</td><td>Requirement</td><td>Required if wet facilities above</td><td>G.7.4</td><td></td><td>See detailed reqs in G.7.4</td>
+                    </tr>
+                </tbody>
+            </table>
+        </details>
+    </section>
+
+    <!-- Section 4: Layout Figure Reference (Expandable - Unchanged) -->
+    <section id="layout-reference">
+        <details>
+            <summary>4. Layout Figure Reference (Click to Expand)</summary>
+             <table>
+                <thead>
+                    <tr>
+                        <th>Layout Figure</th>
+                        <th>Description</th>
+                        <th>Key Elements/Dimensions Shown</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                     <tr><td>Fig G.36</td><td>General Dimensions - Substation within Building</td><td>Overall room, Tx base, RMU/RTU space, trench</td><td>Base for internal layouts</td></tr>
+                     <tr><td>Fig G.37</td><td>Detail within Fig G.36</td><td>Trench details, chequered plate mount</td><td>Construction detail</td></tr>
+                     <tr><td>Fig G.38</td><td>Substation Neutral Earthing</td><td>Neutral/Body earth separation schematic</td><td>Earthing concept</td></tr>
+                     <tr><td>Fig G.39</td><td>Typical 1 Tx Single Room Substation (m)</td><td>6.54x5.00 room layout</td><td>Use with T G.23</td></tr>
+                     <tr><td>Fig G.40</td><td>Typical 2 Tx Single Room Substation (m)</td><td>9.00x6.00 room layout</td><td>Use with T G.23</td></tr>
+                     <tr><td>Fig G.41</td><td>Typical Substation allowing for Add. Tx (m)</td><td>Base layout + extra space allocation</td><td>Area ref for >2 Tx</td></tr>
+                     <tr><td>Fig G.42</td><td>Typical Ground Floor RMU Room (1 RMU) (m)</td><td>3.0x2.0 room (9 m²)</td><td>Split/Basement config</td></tr>
+                     <tr><td>Fig G.43</td><td>Typical Ground Floor RMU Room (Multiple RMUs) (m)</td><td>Base + Extra RMU/Tx space allocation</td><td>Use with T G.24/G.26</td></tr>
+                     <tr><td>Fig G.44</td><td>Typical Ground Floor Transformer Room (m)</td><td>5.00x4.20 room (21 m²)</td><td>Split/Basement config Use with T G.25/G.27</td></tr>
+                     <tr><td>Fig G.45</td><td>Typical OTS Dedicated Substation (m)</td><td>6.10x6.10 footprint layout</td><td>Use with T G.28</td></tr>
+                     <tr><td>Fig G.46</td><td>Typical 1 Tx OTS Pocket Substation (m)</td><td>4.57x3.66 footprint layout</td><td>Use with T G.29</td></tr>
+                     <tr><td>Fig G.47</td><td>Typical 2 Tx OTS Pocket Substation (m)</td><td>6.10x6.10 footprint layout</td><td>Use with T G.29</td></tr>
+                     <tr><td>Fig G.48</td><td>Typical Dedicated 11kV/RMU Room (Enclosed) (m)</td><td>5.40x5.40 room layout</td><td>Use with T G.30</td></tr>
+                     <tr><td>Fig G.49</td><td>Typical Dedicated 11kV/RMU Enclosure (OTS) (m)</td><td>6.10x3.70 footprint layout</td><td>Use with T G.30</td></tr>
+                     <tr><td>Fig G.50</td><td>Substation Louver Details</td><td>Construction/dimension details</td><td>Ventilation/Access detail</td></tr>
+                     <tr><td>Fig G.51</td><td>Substation Door Details</td><td>Construction/dimension details</td><td>Ventilation/Access detail</td></tr>
+                     <tr><td>Fig G.52</td><td>Forced Ventilation (Basement) Layout</td><td>Plan view showing fans/ducts</td><td>Basement ventilation ref</td></tr>
+                     <tr><td>Fig G.53</td><td>Forced Ventilation Section w/ Shutter</td><td>Section view showing shutter/curtain placement</td><td>Basement ventilation ref</td></tr>
+                     <tr><td>Fig G.54</td><td>Substation Cable Trench Detail</td><td>Internal trench cross-section</td><td>Cable entry ref</td></tr>
+                     <tr><td>Fig G.55</td><td>Cable Lying Arrangement (External Trench)</td><td>External concrete encased duct arrangement</td><td>Cable entry ref</td></tr>
+                </tbody>
+            </table>
+        </details>
+    </section>
+
+<script>
+    // --- DATA STORE (Mirroring Sheet 2 - SAMPLE DATA with Area/Width focus) ---
+    // !! CRITICAL: YOU MUST POPULATE THIS FULLY AND ACCURATELY FROM DBC PART G !!
+    const substationData = {
+        // Using objects for easier lookup by key
+        "Single Room GF": {
+            baseArea_1Tx: 33, totalArea_2Tx: 55, addAreaPerTx_over2: 25,
+            minWidth_1Tx: 4.57, minWidth_2Tx: 6.1,
+            clearHeight: "3700", ffl: "150 to 300 (higher)",
+            ventilation: "Natural (2 sides louvered)", wallRating: "2 hr", doorRating: "90 min (if internal opening)",
+            dbcRefs: "T G.23, G.7.2.3, G.7.6.1, G.7.6.2", layoutFig_1Tx: "Fig G.39", layoutFig_2Tx: "Fig G.40", layoutFig_Multi: "Fig G.40 + G.41 Ref"
+        },
+        "Split Room GF - RMU": {
+            baseArea: 9, addAreaPerAddRMU: 7,
+            minWidth: 3, // RMU width is usually fixed
+            clearHeight: "3000", ffl: "150 to 300 (higher)",
+            ventilation: "Natural", wallRating: "2 hr", doorRating: "90 min",
+            dbcRefs: "T G.24, G.7.2.3", layoutFig: "Fig G.42, G.43"
+        },
+        "Split Room GF - Transformer": {
+            baseArea_1Tx: 21, addAreaPerTx: 21,
+            minWidth_1Tx: 4.57, minWidth_2Tx: 6.1,
+            clearHeight: "3700", ffl: "150 to 300 (higher)",
+            ventilation: "Natural", wallRating: "2 hr", doorRating: "90 min",
+            dbcRefs: "T G.25, G.7.2.3", layoutFig_1Tx: "Fig G.44", layoutFig_Multi: "Fig G.44 Ref"
+        },
+        "Basement - RMU (GF)": {
+             baseArea: 9, addAreaPerAddRMU: 7,
+            minWidth: 3,
+            clearHeight: "3000", ffl: "150-300 (higher)",
+            ventilation: "Natural", wallRating: "2 hr", doorRating: "90 min",
+            dbcRefs: "T G.26, G.7.2.3", layoutFig: "Fig G.43"
+        },
+        "Basement - Transformer (B1)": {
+             baseArea_1Tx: 21, addAreaPerTx: 21,
+            minWidth_1Tx: 4.57, minWidth_2Tx: 6.1,
+            clearHeight: "3000", ffl: "75-150 (higher)",
+            ventilation: "Forced + Louver Backup", wallRating: "2 hr", doorRating: "90 min",
+            dbcRefs: "T G.27, G.7.2.3, G.7.6.3, G.7.7", layoutFig_1Tx: "Fig G.44", layoutFig_Multi: "Fig G.44 Ref, G.52/53"
+        },
+        "OTS Dedicated Panel": {
+            footprint: "6.1 x 6.1", minWidth: 6.1, baseArea: 37.2, // Added area for consistency if needed
+            clearHeight: "N/A", ffl: "N/A",
+            ventilation: "Natural", wallRating: "N/A (Wall opt.)", doorRating: "N/A",
+            dbcRefs: "T G.28, G.7.5.4", layoutFig: "Fig G.45"
+        },
+        "OTS Pocket (1 Tx)": {
+            footprint: "4.57 x 3.66", minWidth: 4.57, baseArea: 16.7, // Approx area
+            clearHeight: "N/A", ffl: "N/A",
+            ventilation: "Natural", wallRating: "N/A (Wall opt.)", doorRating: "N/A",
+            dbcRefs: "T G.29, G.7.5.5", layoutFig: "Fig G.46"
+        },
+        "OTS Pocket (2 Tx)": {
+            footprint: "6.1 x 6.1", minWidth: 6.1, baseArea: 37.2, // Approx area
+            clearHeight: "N/A", ffl: "N/A",
+            ventilation: "Natural", wallRating: "N/A (Wall opt.)", doorRating: "N/A",
+            dbcRefs: "T G.29, G.7.5.5", layoutFig: "Fig G.47"
+        },
+        "DEWA Control Room (11kV - Enc)": {
+            baseArea: 29.16, addAreaPerFeeder: 8,
+            minWidth: 5.4, roomSize: "5.4 x 5.4",
+            clearHeight: "N/A", ffl: "N/A", ventilation: "N/A", wallRating: "N/A", doorRating: "N/A",
+            dbcRefs: "T G.30, G.7.9", layoutFig: "Fig G.48"
+        },
+        "DEWA Control Room (11kV - OTS)": {
+             baseArea: 37.2, addAreaPerFeeder: 37.2,
+            minWidth: 6.1, footprint: "6.1 x 6.1",
+            clearHeight: "N/A", ffl: "N/A", ventilation: "Natural (Kiosk)", wallRating: "N/A (Wall opt.)", doorRating: "N/A (Kiosk)",
+            dbcRefs: "T G.30, G.7.9", layoutFig: "Fig G.49"
+        },
+        "COMMON": { // Common data points if needed elsewhere
+             atticSlabRef: "G.7.4"
+        }
+    };
+
+    // --- DOM Elements ---
+    const form = document.getElementById('substation-form');
+    const inputs = form.querySelectorAll('input, select');
+    // Get references to all output spans
+    const outputType = document.getElementById('output-type');
+    const outputDimensions = document.getElementById('output-dimensions');
+    const outputWidth = document.getElementById('output-width');
+    const outputHeight = document.getElementById('output-height');
+    const outputFfl = document.getElementById('output-ffl');
+    const outputVentilation = document.getElementById('output-ventilation');
+    const outputWallRating = document.getElementById('output-firerating-walls');
+    const outputDoorRating = document.getElementById('output-firerating-doors');
+    const outputAttic = document.getElementById('output-attic');
+    const outputDbcRefs = document.getElementById('output-dbc-refs');
+    const outputLayoutFig = document.getElementById('output-layout-fig');
+    const outputNotes = document.getElementById('output-notes');
+
+    // --- Helper to reset outputs ---
+    function resetOutputs() {
+        outputType.textContent = '-';
+        outputDimensions.textContent = '-';
+        outputWidth.textContent = '-';
+        outputHeight.textContent = '-';
+        outputFfl.textContent = '-';
+        outputVentilation.textContent = '-';
+        outputWallRating.textContent = '-';
+        outputDoorRating.textContent = '-';
+        outputAttic.textContent = '-';
+        outputDbcRefs.textContent = '-';
+        outputLayoutFig.textContent = '-';
+        outputNotes.textContent = '-';
+        outputAttic.className = 'output-value'; // Reset class
+    }
+
+    // --- Update Function ---
+    function updateResults() {
+        // Get current input values
+        const location = document.getElementById('substationLocation').value;
+        const rmuLocation = document.getElementById('rmuLocation').value;
+        const numTxStr = document.getElementById('numTransformers').value;
+        const numTx = parseInt(numTxStr) || 0; // Use 0 if invalid
+        const wetAreas = document.getElementById('wetAreasAbove').value;
+        const highRise = document.getElementById('superHighRise').value;
+        const tcl = parseInt(document.getElementById('estimatedTCL').value) || 0;
+
+        // Reset if essential inputs are missing
+        if (!location || numTx === 0) {
+            resetOutputs();
+            outputType.textContent = 'Please select Location and Number of Transformers.';
+            return;
+        }
+
+        let baseTypeKey = "N/A";
+        let rmuTypeKey = null; // Key for RMU part in split configs
+        let txTypeKey = null; // Key for Tx part in split configs
+        let data = null; // Will hold the final combined/single data object
+        let rmuData = null;
+        let txData = null;
+        let notes = [];
+        let layoutFig = '-';
+
+        // --- Determine Base Type Keys ---
+        if (highRise === "Yes") {
+            baseTypeKey = "DEWA Control Room (11kV - Enc)"; // Defaulting to enclosed
+             // Add logic here if you need to select "DEWA Control Room (11kV - OTS)" based on other inputs
+            notes.push("Direct 11kV Supply - Refer to G.7.9 Requirements.");
+        } else if (location === "Basement") {
+            rmuTypeKey = "Basement - RMU (GF)";
+            txTypeKey = "Basement - Transformer (B1)";
+            baseTypeKey = "Basement - Split Room"; // Representing the combined concept
+            notes.push("Basement config: RMU on GF, Tx in B1. Check Transport G.7.7.");
+        } else if (location === "Open-to-Sky") {
+            if (numTx >= 2) {
+                 baseTypeKey = "OTS Pocket (2 Tx)";
+            } else {
+                 baseTypeKey = "OTS Pocket (1 Tx)";
+            }
+            // Example override logic (adjust threshold as needed)
+            if(tcl > 1500){ // Switch to Dedicated if TCL is high
+                 baseTypeKey = "OTS Dedicated Panel";
+                 notes.push(`Selected OTS Dedicated Panel (possibly due to high TCL > 1500kW).`);
+            }
+            notes.push("Check max wall height (2.1m). Check soakaway distance (3.66m).");
+        } else if (location === "Ground Floor") {
+            if (rmuLocation === "Separate Room (GF)") {
+                rmuTypeKey = "Split Room GF - RMU";
+                txTypeKey = "Split Room GF - Transformer";
+                baseTypeKey = "Split Room GF"; // Representing the combined concept
+            } else { // Assume Same Room
+                baseTypeKey = "Single Room GF";
+            }
+        }
+
+        // --- Retrieve Data Objects ---
+        if(rmuTypeKey && txTypeKey) { // Split configuration
+             rmuData = substationData[rmuTypeKey];
+             txData = substationData[txTypeKey];
+             data = txData; // Use Tx data as primary for most common fields
+             if(!rmuData || !txData){
+                 console.error("Missing data for split config:", rmuTypeKey, txTypeKey);
+                 resetOutputs();
+                 outputType.textContent = `Error: Missing data for ${baseTypeKey}`;
+                 return;
+             }
+        } else if (baseTypeKey !== "N/A" && baseTypeKey !== "Basement - Split Room" && baseTypeKey !== "Split Room GF") { // Single Type Config
+             data = substationData[baseTypeKey];
+             if(!data){
+                 console.error("Missing data for type:", baseTypeKey);
+                 resetOutputs();
+                 outputType.textContent = `Error: Missing data for ${baseTypeKey}`;
+                 return;
+             }
+        } else { // No type determined or invalid state
+             resetOutputs();
+             outputType.textContent = 'Could not determine substation type.';
+             return;
+        }
+
+
+        // --- Calculations ---
+        let totalArea = 0;
+        let requiredWidth = 0;
+        let approxLength = 0;
+        let dimensionsText = '-';
+        let widthText = '-'; // Separate text for the width row
+
+        try { // Wrap calculations in try-catch for safety
+            if (rmuTypeKey && txTypeKey) { // SPLIT CONFIGURATION
+                let txArea = txData.baseArea_1Tx || 0;
+                let rmuArea = rmuData.baseArea || 0;
+                // Scale Tx area
+                if (numTx > 1 && txData.addAreaPerTx) {
+                    txArea += (numTx - 1) * txData.addAreaPerTx;
+                }
+                // Assume only 1 RMU controls multiple Tx unless specified otherwise
+                totalArea = txArea + rmuArea;
+
+                // Get widths
+                let txWidth = (numTx >= 2 && txData.minWidth_2Tx) ? txData.minWidth_2Tx : txData.minWidth_1Tx;
+                let rmuWidth = rmuData.minWidth;
+                requiredWidth = Math.max(txWidth || 0, rmuWidth || 0); // Overall constraint guide
+
+                dimensionsText = `RMU (~${rmuArea.toFixed(1)}m²) + Tx (~${txArea.toFixed(1)}m²) = Total ~${totalArea.toFixed(1)}m²`;
+                widthText = `RMU: ${rmuWidth || '-'}m / Tx: ${txWidth || '-'}m`;
+                layoutFig = `RMU: ${rmuData.layoutFig || '-'} / Tx: ${txData.layoutFig_1Tx || '-'}`;
+                if (numTx > 1 && txData.layoutFig_Multi) layoutFig += ` + ${txData.layoutFig_Multi}`;
+
+            } else if (data && baseTypeKey === "Single Room GF") { // SINGLE ROOM GF
+                if (numTx === 1) {
+                    totalArea = data.baseArea_1Tx;
+                    requiredWidth = data.minWidth_1Tx;
+                    layoutFig = data.layoutFig_1Tx;
+                } else if (numTx === 2) {
+                    totalArea = data.totalArea_2Tx;
+                    requiredWidth = data.minWidth_2Tx;
+                    layoutFig = data.layoutFig_2Tx;
+                } else { // numTx > 2
+                    totalArea = data.totalArea_2Tx + (numTx - 2) * data.addAreaPerTx_over2;
+                    requiredWidth = data.minWidth_2Tx; // Assume width stable > 2Tx
+                    notes.push(`Width for >2 Tx based on 2 Tx value (${requiredWidth}m).`);
+                    layoutFig = data.layoutFig_Multi || data.layoutFig_2Tx; // Use multi layout ref if available
+                }
+                if(requiredWidth && requiredWidth > 0) approxLength = totalArea / requiredWidth;
+                dimensionsText = `Approx. ${approxLength.toFixed(1)} x ${requiredWidth.toFixed(2)} m (Area: ${totalArea.toFixed(1)}m²)`;
+                widthText = requiredWidth.toFixed(2);
+
+            } else if (data && (baseTypeKey.includes("OTS") || baseTypeKey.includes("11kV"))) { // OTS / 11KV
+                totalArea = data.baseArea || 0; // Use base area if defined (for 11kV)
+                requiredWidth = data.minWidth || 0;
+                dimensionsText = data.footprint || data.roomSize || (totalArea > 0 ? `Area: ${totalArea.toFixed(1)}m²` : 'Refer to Layout');
+                widthText = requiredWidth > 0 ? requiredWidth.toFixed(2) : 'Refer to Layout';
+                layoutFig = data.layoutFig;
+                 // Add area scaling for 11kV control rooms (using numTx as proxy for feeder count)
+                let numFeeders = numTx; // Replace numTx with actual feeder count if available
+                if(data.addAreaPerFeeder && numFeeders > 2) {
+                   totalArea += (numFeeders - 2) * data.addAreaPerFeeder;
+                   dimensionsText += ` (Scaled Area for ${numFeeders} feeders: ~${totalArea.toFixed(1)}m²)`;
+                }
+            } else if (data) { // Fallback for other potential single types
+                 totalArea = data.baseArea_1Tx || data.baseArea || 0;
+                 requiredWidth = data.minWidth_1Tx || data.minWidth || 0;
+                 if(requiredWidth && requiredWidth > 0) approxLength = totalArea / requiredWidth;
+                 dimensionsText = totalArea > 0 ? `Approx. ${approxLength.toFixed(1)} x ${requiredWidth.toFixed(2)} m (Area: ${totalArea.toFixed(1)}m²)` : 'Dimensions Not Calculated';
+                 widthText = requiredWidth > 0 ? requiredWidth.toFixed(2) : '-';
+                 layoutFig = data.layoutFig || data.layoutFig_1Tx || '-';
+            }
+        } catch (error) {
+             console.error("Error during calculation:", error);
+             notes.push("Calculation Error - Check data and inputs.");
+             dimensionsText = "Error";
+             widthText = "Error";
+        }
+
+
+        // --- Update Output Fields ---
+        outputType.textContent = baseTypeKey + (rmuTypeKey ? ' (Split Config)' : '');
+        outputDimensions.textContent = dimensionsText;
+        outputWidth.textContent = widthText;
+        // Use primary 'data' object (usually Tx part for split) for common fields, fallback to RMU if needed
+        outputHeight.textContent = data?.clearHeight || rmuData?.clearHeight || '-';
+        outputFfl.textContent = data?.ffl || rmuData?.ffl || '-';
+        outputVentilation.textContent = data?.ventilation || '-';
+        outputWallRating.textContent = data?.wallRating || '-';
+        outputDoorRating.textContent = data?.doorRating || '-';
+        outputDbcRefs.textContent = (txData?.dbcRefs || data?.dbcRefs || '') + (rmuData?.dbcRefs ? ` / RMU: ${rmuData.dbcRefs}` : ''); // Show both refs for split
+        outputLayoutFig.textContent = layoutFig; // Already determined during calc
+
+
+        // Update Attic Slab Note
+        if (wetAreas === 'Yes' && !baseTypeKey.includes("OTS") && !baseTypeKey.includes("11kV - OTS")) {
+            outputAttic.textContent = 'Yes - Required';
+            outputAttic.className = 'output-value highlight';
+            if (!notes.some(n => n.includes("Attic Slab"))) notes.push(`Attic Slab Required - See ${substationData.COMMON?.atticSlabRef || 'G.7.4'} for details.`);
+        } else {
+            outputAttic.textContent = 'No';
+            outputAttic.className = 'output-value';
+        }
+
+        // Add final common notes
+        if(tcl > 400 && !baseTypeKey.includes("11kV")){
+             if(!notes.some(n => n.includes("TCL > 400kW"))) notes.push("TCL > 400kW typically requires a substation.");
+         }
+
+        // Display notes
+        outputNotes.innerHTML = notes.length > 0 ? notes.map(n => `• ${n}<br>`).join('') : '-';
+
+    }
+
+    // --- Event Listeners ---
+    inputs.forEach(input => {
+        input.addEventListener('input', updateResults);
+        input.addEventListener('change', updateResults);
+    });
+
+    // --- Initial Calculation on Load ---
+    document.addEventListener('DOMContentLoaded', updateResults);
+
+</script>
+
+</body>
+</html>
